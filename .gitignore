@@ -1,0 +1,27 @@
+node_modules/
+dist/
+*.log
+
+# Secrets
+.env
+
+# ---- Personal financial data — NEVER commit ----
+# Your source workbook and broker exports
+Net Worth.xlsx
+*.xlsx
+Positions_*.csv
+# App-generated data + backups
+server/data.db
+server/data.db-*
+server/seed.json
+networth-export.json
+networth-snapshots.csv
+# Local-only tests that assert your real figures
+tests/local/
+
+# Local tooling / editor
+.claude/
+.DS_Store
+
+# Build artifacts
+*.tsbuildinfo

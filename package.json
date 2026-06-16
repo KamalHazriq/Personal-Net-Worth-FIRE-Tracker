@@ -1,0 +1,24 @@
+{
+  "name": "fire-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first Personal Net Worth & FIRE Tracker (MYR, Shariah-compliant)",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --workspace server run dev",
+    "dev:client": "npm --workspace client run dev",
+    "seed": "npm --workspace server run seed",
+    "build": "npm --workspace client run build",
+    "start": "npm --workspace server run start",
+    "test": "tsx --test tests/dates.test.ts tests/fire.test.ts tests/parse.test.ts tests/queries.test.ts",
+    "test:local": "tsx --test tests/local/import.test.ts tests/local/queries.test.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2"
+  }
+}

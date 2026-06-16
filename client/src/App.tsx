@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
+import { AuthGate } from './components/AuthGate';
 import { PageSkeleton } from './components/ui';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -40,9 +41,11 @@ export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <ToastProvider>
-        <Layout>
-          <AppRoutes />
-        </Layout>
+        <AuthGate>
+          <Layout>
+            <AppRoutes />
+          </Layout>
+        </AuthGate>
       </ToastProvider>
     </BrowserRouter>
   );

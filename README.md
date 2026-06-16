@@ -108,6 +108,20 @@ Change the model or toggle web search on the **Settings** page. Every Q&A is log
 
 ---
 
+## Local passcode (optional)
+
+The app runs on **localhost only** (`127.0.0.1`) — it is never reachable from other devices on your
+network. If you also want to stop anyone at your computer from opening it, set a passcode in
+**Settings → Security**:
+
+- It's enforced by the **backend** — every API call needs a valid session token, so it can't be
+  bypassed by hitting the API directly. The passcode is stored only as a salted **scrypt hash**.
+- The app shows an **unlock screen** until you enter it, and re-locks when the server restarts.
+- It does **not** encrypt the database file at rest — for that you'd add SQLCipher (not included).
+  Your OS login remains the boundary for direct file access.
+
+You can change or remove the passcode anytime in Settings, or hit **Lock now** to lock immediately.
+
 ## Export & backup
 
 **Settings → Export**:

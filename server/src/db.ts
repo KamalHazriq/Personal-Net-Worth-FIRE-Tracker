@@ -170,6 +170,16 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_date ON snapshots(date);
 CREATE INDEX IF NOT EXISTS idx_positions_snapshot ON positions(snapshot_id);
 `;
 
+// Additive migrations for columns added after the initial schema.
+const MIGRATIONS = ['ALTER TABLE settings ADD COLUMN passcode_hash TEXT'];
+
 export function initSchema(db: Database.Database) {
   db.exec(SCHEMA);
+  for (const m of MIGRATIONS) {
+    try {
+      db.exec(m);
+    } catch {
+      /* column already exists — ignore */
+    }
+  }
 }

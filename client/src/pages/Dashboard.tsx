@@ -10,6 +10,7 @@ import {
   Sparkline,
   LiquidLockedGauge,
 } from '../components/charts';
+import Welcome from './Welcome';
 
 export default function Dashboard() {
   const [d, setD] = useState<any>(null);
@@ -47,7 +48,7 @@ export default function Dashboard() {
 
   if (err) return <ErrorState err={err} />;
   if (!d) return <PageSkeleton />;
-  if (d.empty) return <div className="text-muted">No data yet — run the importer.</div>;
+  if (d.empty) return <Welcome />;
 
   const inv = d.invested;
 

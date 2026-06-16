@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Download, FileJson, FileSpreadsheet, FileText, KeyRound, CheckCircle2, XCircle } from 'lucide-react';
-import { api } from '../lib/api';
+import { Download, FileJson, FileSpreadsheet, FileText, KeyRound, CheckCircle2, XCircle, Lock, ShieldCheck } from 'lucide-react';
+import { api, setToken, clearToken } from '../lib/api';
 import { Card, CardHeader, Field, TextInput, SelectInput, Button } from '../components/ui';
+import { useToast } from '../components/Toast';
 
 export default function Settings() {
   const [s, setS] = useState<any>(null);
@@ -84,6 +85,8 @@ export default function Settings() {
         </div>
       </Card>
 
+      <SecurityCard passcodeSet={!!s.passcode_set} onChanged={() => api('/settings').then(setS)} />
+
       <Card className="p-5">
         <CardHeader title="Export" subtitle="Download your data — open the xlsx in Excel, the json is a full backup." />
         <div className="flex flex-wrap gap-3 mt-4">
@@ -102,5 +105,93 @@ export default function Settings() {
         </p>
       </Card>
     </div>
+  );
+}
+
+function SecurityCard({ passcodeSet, onChanged }: { passcodeSet: boolean; onChanged: () => void }) {
+  const toast = useToast();
+  const [pass, setPass] = useState('');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [err, setErr] = useState('');
+
+  const wrap = (fn: () => Promise<any>) => async () => {
+    setErr('');
+    try {
+      await fn();
+    } catch (e: any) {
+      setErr(e.message || 'Failed');
+    }
+  };
+
+  const setup = wrap(async () => {
+    const r = await api('/auth/setup', { method: 'POST', body: JSON.stringify({ passcode: pass }) });
+    setToken(r.token);
+    setPass('');
+    toast('Passcode set');
+    onChanged();
+  });
+  const change = wrap(async () => {
+    const r = await api('/auth/change', { method: 'POST', body: JSON.stringify({ current, next }) });
+    setToken(r.token);
+    setCurrent('');
+    setNext('');
+    toast('Passcode changed');
+    onChanged();
+  });
+  const remove = wrap(async () => {
+    await api('/auth/remove', { method: 'POST', body: JSON.stringify({ current }) });
+    clearToken();
+    setCurrent('');
+    toast('Passcode removed');
+    onChanged();
+  });
+  const lockNow = () => {
+    clearToken();
+    window.dispatchEvent(new CustomEvent('auth:required'));
+  };
+
+  return (
+    <Card className="p-5">
+      <CardHeader
+        title="Security — local passcode"
+        subtitle="Optional. Locks the app and the API on this machine. The app is already only reachable from localhost."
+      />
+      <div className="mt-4 space-y-4">
+        <div className="flex items-center gap-2 text-sm">
+          {passcodeSet ? (
+            <span className="flex items-center gap-1 text-gain"><ShieldCheck size={15} /> Passcode is set — the app locks when reopened</span>
+          ) : (
+            <span className="flex items-center gap-1 text-muted"><Lock size={15} /> No passcode — anyone on this computer can open the app</span>
+          )}
+        </div>
+
+        {!passcodeSet ? (
+          <div className="flex items-end gap-2">
+            <Field label="Set a passcode (min 4 chars)">
+              <TextInput type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="••••" />
+            </Field>
+            <Button onClick={setup}>Set passcode</Button>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Current passcode">
+                <TextInput type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+              </Field>
+              <Field label="New passcode">
+                <TextInput type="password" value={next} onChange={(e) => setNext(e.target.value)} />
+              </Field>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={change}>Change</Button>
+              <Button variant="danger" onClick={remove}>Remove passcode</Button>
+              <Button variant="outline" onClick={lockNow} className="ml-auto"><Lock size={14} /> Lock now</Button>
+            </div>
+          </>
+        )}
+        {err && <p className="text-loss text-xs">{err}</p>}
+      </div>
+    </Card>
   );
 }

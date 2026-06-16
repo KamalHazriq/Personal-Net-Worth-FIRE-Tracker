@@ -6,6 +6,14 @@ import { openDb, initSchema, PROJECT_ROOT } from './db.js';
 import { seed } from './seed.js';
 import { buildContext, callAnthropic } from './lib/assistant.js';
 import { exportJson, exportSnapshotsCsv, exportXlsxBuffer } from './lib/exporter.js';
+import {
+  hashPasscode,
+  verifyPasscode,
+  issueToken,
+  isValidToken,
+  revokeToken,
+  revokeAllTokens,
+} from './lib/auth.js';
 
 // Load .env from project root first, then server dir / cwd as fallback.
 dotenv.config({ path: join(PROJECT_ROOT, '.env') });
@@ -52,10 +60,63 @@ const num = (v: any, fallback: number | null): number | null => {
   return isFinite(n) ? n : fallback;
 };
 
+const passcodeHash = () => (getSettings(db) as any).passcode_hash as string | null;
+/** Settings for HTTP responses — never expose the passcode hash. */
+const publicSettings = () => {
+  const { passcode_hash, ...rest } = getSettings(db) as any;
+  return { ...rest, passcode_set: !!passcode_hash };
+};
+
+// ---- Auth gate: when a passcode is set, every /api call needs a valid token
+// (except /api/health and /api/auth/*). When none is set, the app is open. ----
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (req.path === '/api/health' || req.path.startsWith('/api/auth/')) return next();
+  if (!passcodeHash()) return next();
+  if (isValidToken(req.header('x-auth-token'))) return next();
+  res.status(401).json({ error: 'locked' });
+});
+
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+// ---- Auth ----
+app.get('/api/auth/status', (_req, res) =>
+  res.json({ enabled: !!passcodeHash(), unlocked: isValidToken(_req.header('x-auth-token')) }),
+);
+app.post('/api/auth/setup', (req, res) => {
+  if (passcodeHash()) return res.status(400).json({ error: 'passcode already set' });
+  const { passcode } = req.body || {};
+  if (!passcode || String(passcode).length < 4) return res.status(400).json({ error: 'passcode must be at least 4 characters' });
+  db.prepare('UPDATE settings SET passcode_hash=? WHERE id=1').run(hashPasscode(String(passcode)));
+  res.json({ ok: true, token: issueToken() });
+});
+app.post('/api/auth/login', (req, res) => {
+  const { passcode } = req.body || {};
+  if (!verifyPasscode(String(passcode || ''), passcodeHash())) return res.status(401).json({ error: 'wrong passcode' });
+  res.json({ ok: true, token: issueToken() });
+});
+app.post('/api/auth/change', (req, res) => {
+  const { current, next: nextPass } = req.body || {};
+  if (!verifyPasscode(String(current || ''), passcodeHash())) return res.status(401).json({ error: 'wrong current passcode' });
+  if (!nextPass || String(nextPass).length < 4) return res.status(400).json({ error: 'new passcode must be at least 4 characters' });
+  db.prepare('UPDATE settings SET passcode_hash=? WHERE id=1').run(hashPasscode(String(nextPass)));
+  revokeAllTokens();
+  res.json({ ok: true, token: issueToken() });
+});
+app.post('/api/auth/remove', (req, res) => {
+  const { current } = req.body || {};
+  if (!verifyPasscode(String(current || ''), passcodeHash())) return res.status(401).json({ error: 'wrong passcode' });
+  db.prepare('UPDATE settings SET passcode_hash=NULL WHERE id=1').run();
+  revokeAllTokens();
+  res.json({ ok: true });
+});
+app.post('/api/auth/logout', (req, res) => {
+  revokeToken(req.header('x-auth-token') || undefined);
+  res.json({ ok: true });
+});
+
 // ---- Settings ----
-app.get('/api/settings', (_req, res) => res.json(getSettings(db)));
+app.get('/api/settings', (_req, res) => res.json(publicSettings()));
 app.put('/api/settings', (req, res) => {
   const allowed = [
     'usd_myr_rate',
@@ -76,7 +137,7 @@ app.put('/api/settings', (req, res) => {
     }
   }
   if (sets.length) db.prepare(`UPDATE settings SET ${sets.join(',')} WHERE id=1`).run(...vals);
-  res.json(getSettings(db));
+  res.json(publicSettings());
 });
 
 // ---- Accounts ----

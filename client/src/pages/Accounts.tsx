@@ -86,7 +86,10 @@ export default function Accounts() {
 
   if (!grid) return <PageSkeleton />;
 
-  const yearTabs = Array.from(new Set([...grid.years, Math.max(...grid.years, year) + 1])).sort();
+  // Always include the current/selected year and one year ahead, even on an empty DB.
+  const knownYears = grid.years.length ? grid.years : [grid.year];
+  const yearTabs = Array.from(new Set([...knownYears, grid.year, Math.max(...knownYears, grid.year) + 1])).sort();
+  const isEmpty = grid.groups.every((g) => g.accounts.length === 0);
 
   return (
     <div className="space-y-4">
@@ -118,6 +121,14 @@ export default function Accounts() {
           </button>
         ))}
       </div>
+
+      {isEmpty && (
+        <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted">
+          No accounts yet. Click <span className="text-text font-medium">“Add account”</span> to create
+          your first one, then type a balance into a month cell — Net Worth and the FIRE projection
+          start filling in immediately.
+        </div>
+      )}
 
       {/* Grid */}
       <div className="rounded-xl border border-border overflow-auto">

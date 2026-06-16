@@ -11,19 +11,35 @@ your data lives in a local SQLite file on your machine.
 ## Quick start
 
 ```bash
+git clone https://github.com/KamalHazriq/Personal-Net-Worth-FIRE-Tracker.git
+cd Personal-Net-Worth-FIRE-Tracker
 npm install        # installs both workspaces (server + client)
 npm run dev        # starts the API (:8787) and the web app (:5173)
 ```
 
-Then open **http://localhost:5173**.
+Then open **http://localhost:5173**. Requirements: Node 18+ (developed on Node 22). Windows/macOS/Linux.
 
-On first run the backend automatically seeds the database from `Net Worth.xlsx` and
-`Positions_*.csv` in this folder — so the app is fully populated immediately.
+> `npm install` builds `better-sqlite3` (a native module); it ships prebuilt binaries for common
+> Node versions, so no compiler is normally needed.
 
-Requirements: Node 18+ (developed on Node 22). Windows/macOS/Linux.
+### Starting with your own data
 
-> One-time: `npm install` builds `better-sqlite3` (a native module). It ships prebuilt
-> binaries for common Node versions, so no compiler is normally needed.
+A fresh clone opens with an **empty database** — there's no personal financial data in the repo.
+Add your own (everything stays local on your machine):
+
+1. **Accounts page → “Add account”** to create your bank / investment / liability accounts, then
+   click any month cell and type the balance. Subtotals, Net Worth and the FIRE projection update
+   live. (Arrow keys / Enter move between cells like a spreadsheet.)
+2. **Holdings page → “Import CSV”** to drop in a MooMoo positions export (or paste it). Tag holdings
+   as ETF/Individual once and it sticks across imports.
+3. **Settings** to set your USD/MYR rate, age, target retirement age, SWR and FIRE target income.
+4. **(Optional) AI Assistant** — see below; add an API key to enable it.
+
+> **Bulk import from Excel:** the bundled importer in `server/src/import/` is tailored to *one
+> specific* workbook layout (the author's `Net Worth.xlsx`). A different spreadsheet won't import
+> as-is — start with the steps above, or adapt the parser in `parseWorkbook.ts` to your sheet format.
+> If a file named `Net Worth.xlsx` *is* present in the project root on first run, it will be
+> auto-seeded; otherwise the app simply starts empty.
 
 ---
 

@@ -75,6 +75,9 @@ export default function Settings() {
           <Field label="Safe withdrawal rate (%)">
             <TextInput type="number" step="0.1" value={(s.swr * 100).toFixed(1)} onChange={(e) => update({ swr: Number(e.target.value) / 100 })} />
           </Field>
+          <Field label="Zakat nisab (RM — 85g gold value)">
+            <TextInput type="number" step="100" value={s.nisab ?? 30000} onChange={(e) => update({ nisab: Number(e.target.value) })} />
+          </Field>
         </div>
       </Card>
 

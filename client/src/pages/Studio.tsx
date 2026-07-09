@@ -58,12 +58,15 @@ export default function Studio() {
   const [handle, setHandle] = useState(() => localStorage.getItem('studio_handle') || '@yourhandle');
   const [mode, setMode] = useState<'rm' | 'pct'>((localStorage.getItem('studio_mode') as any) || 'rm');
   const [title, setTitle] = useState('');
+  const [notes, setNotes] = useState(() => localStorage.getItem('studio_notes') || '');
+  const [settings, setSettings] = useState<any>(null);
   const toast = useToast();
 
   const load = () =>
-    Promise.all([api('/dashboard'), api('/allocation')]).then(([d, a]) => {
+    Promise.all([api('/dashboard'), api('/allocation'), api('/settings')]).then(([d, a, st]) => {
       setDash(d);
       setAlloc(a);
+      setSettings(st);
       setTitle((t) => t || monthFull(d.latestDate));
     });
   useEffect(() => {
@@ -80,10 +83,29 @@ export default function Studio() {
   useEffect(() => {
     localStorage.setItem('studio_mode', mode);
   }, [mode]);
+  useEffect(() => {
+    localStorage.setItem('studio_notes', notes);
+  }, [notes]);
 
   const data = useMemo(() => {
     if (!dash || !alloc) return null;
     const series = dash.series.slice(-13); // last ~12 months + start point
+
+    // per-asset breakdown with month-over-month change (from the series' byCategory)
+    const s = dash.series;
+    const cur: Record<string, number> = s[s.length - 1]?.byCategory || {};
+    const prev: Record<string, number> = s.length > 1 ? s[s.length - 2]?.byCategory || {} : {};
+    const bTotal = Object.values(cur).reduce((a: number, b: any) => a + (b || 0), 0) || 1;
+    const breakdown = [...new Set([...Object.keys(cur), ...Object.keys(prev)])]
+      .map((k) => ({
+        label: k === 'Bank' ? 'Cash' : k,
+        value: cur[k] || 0,
+        delta: (cur[k] || 0) - (prev[k] || 0),
+        pct: ((cur[k] || 0) / bTotal) * 100,
+      }))
+      .filter((x) => x.value > 0)
+      .sort((a, b) => b.value - a.value);
+
     return {
       title,
       netWorth: dash.netWorth,
@@ -93,11 +115,16 @@ export default function Studio() {
       exEpfPct: dash.netWorth ? (dash.netWorthExEpf / dash.netWorth) * 100 : 0,
       alloc: alloc.items as { label: string; value: number; pct: number }[],
       allocTotal: alloc.total,
+      breakdown,
+      breakdownTotal: bTotal,
+      fireTarget: settings && settings.swr ? (settings.fire_target_monthly_income * 12) / settings.swr : 3000000,
+      targetAge: settings?.target_retire_age ?? 45,
       series,
       handle,
       mode,
+      notes,
     };
-  }, [dash, alloc, title, handle, mode]);
+  }, [dash, alloc, settings, title, handle, mode, notes]);
 
   if (!data) return <PageSkeleton />;
 
@@ -168,6 +195,17 @@ export default function Studio() {
             </label>
           ))}
         </div>
+        <div className="mt-4">
+          <Field label="Notes (for the Notes card — one bullet per line)">
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder={'added car (fully paid off) to net worth\neventually trimming cash under 10%\nin between jobs — no salary this month'}
+              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent leading-relaxed"
+            />
+          </Field>
+        </div>
       </Card>
 
       {/* Cards */}
@@ -175,6 +213,9 @@ export default function Studio() {
         <StudioCard id="1-number" draw={(x) => drawCover(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
         <StudioCard id="2-allocation" draw={(x) => drawDonut(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
         <StudioCard id="3-trend" draw={(x) => drawTrend(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
+        <StudioCard id="4-breakdown" draw={(x) => drawBreakdown(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
+        <StudioCard id="5-fire" draw={(x) => drawFire(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
+        <StudioCard id="6-notes" draw={(x) => drawNotes(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
       </div>
 
       <p className="text-xs text-muted">
@@ -463,10 +504,10 @@ function drawDonut(x: Ctx, d: any, t: Theme) {
   x.fillStyle = t.ink;
   if (d.mode === 'rm') {
     x.font = F(800, 54);
-    x.fillText(rmFmt(total), cx, cy);
+    x.fillText(rmFmt(d.netWorth), cx, cy);
     x.font = F(600, 30);
     x.fillStyle = t.dim;
-    x.fillText('total assets', cx, cy + 46);
+    x.fillText('net worth', cx, cy + 46);
   } else {
     x.font = F(800, 50);
     x.fillText('allocation', cx, cy + 8);
@@ -591,4 +632,147 @@ function drawTrend(x: Ctx, d: any, t: Theme) {
 function hexA(hex: string, a: number): string {
   const n = hex.replace('#', '');
   return `rgba(${parseInt(n.slice(0, 2), 16)},${parseInt(n.slice(2, 4), 16)},${parseInt(n.slice(4, 6), 16)},${a})`;
+}
+
+// ---------- Card 4: every-investment breakdown ----------
+function drawBreakdown(x: Ctx, d: any, t: Theme) {
+  bgBase(x, t);
+  header(x, t, 'what i hold', d.title);
+
+  const rows = d.breakdown as { label: string; value: number; delta: number; pct: number }[];
+  const palette = donutPalette(t, rows.length);
+  const top = 320;
+  const rowH = Math.min(110, (SIZE - top - 130) / Math.max(rows.length, 1));
+
+  rows.forEach((r, i) => {
+    const y = top + i * rowH;
+    // color dot + name
+    x.beginPath();
+    x.arc(112, y + rowH / 2 - 6, 16, 0, Math.PI * 2);
+    x.fillStyle = palette[i];
+    x.fill();
+    x.fillStyle = t.ink;
+    x.font = F(700, 40);
+    x.textAlign = 'left';
+    x.fillText(r.label, 150, y + rowH / 2 + 6);
+
+    // % of total (dim, under name)
+    x.fillStyle = t.dim;
+    x.font = F(600, 26);
+    x.fillText(r.pct.toFixed(1) + '% of assets', 150, y + rowH / 2 + 40);
+
+    // value (right)
+    x.textAlign = 'right';
+    x.fillStyle = t.ink;
+    x.font = F(800, 42);
+    x.fillText(d.mode === 'rm' ? rmFmt(r.value) : r.pct.toFixed(1) + '%', SIZE - 84, y + rowH / 2 - 4);
+
+    // MoM delta arrow
+    const up = r.delta >= 0;
+    x.fillStyle = up ? t.accent : '#d64550';
+    x.font = F(700, 28);
+    const deltaTxt =
+      Math.abs(r.delta) < 1
+        ? '—'
+        : (up ? '▲ ' : '▼ ') + (d.mode === 'rm' ? rmFmt(Math.abs(r.delta)).slice(3) : (r.delta >= 0 ? '+' : '') + rmFmt(r.delta).slice(3));
+    x.fillText(deltaTxt, SIZE - 84, y + rowH / 2 + 34);
+    x.textAlign = 'left';
+
+    // divider
+    if (i < rows.length - 1) {
+      x.strokeStyle = hexA(t.ink, 0.1);
+      x.lineWidth = 2;
+      x.beginPath();
+      x.moveTo(150, y + rowH);
+      x.lineTo(SIZE - 84, y + rowH);
+      x.stroke();
+    }
+  });
+
+  footer(x, t, d.handle);
+}
+
+// ---------- Card 5: FIRE progress ----------
+function drawFire(x: Ctx, d: any, t: Theme) {
+  bgBase(x, t);
+  header(x, t, 'the long game', d.title);
+
+  const pctToFire = Math.min(100, (d.netWorth / d.fireTarget) * 100);
+
+  panel(x, t, 84, 340, SIZE - 168, 360);
+  x.fillStyle = t.ink;
+  x.font = F(800, 150);
+  x.textAlign = 'left';
+  x.fillText(pctToFire.toFixed(1) + '%', 140, 500);
+  x.fillStyle = t.dim;
+  x.font = F(600, 40);
+  x.fillText(`to my FIRE number of ${rmFmt(d.fireTarget)}`, 140, 570);
+
+  // progress bar
+  const bx = 140, bw = SIZE - 280, by = 610, bh = 54;
+  roundRect(x, bx, by, bw, bh, 27);
+  x.fillStyle = hexA(t.ink, 0.12);
+  x.fill();
+  roundRect(x, bx, by, Math.max(bh, (bw * pctToFire) / 100), bh, 27);
+  x.fillStyle = t.accent;
+  x.fill();
+
+  x.fillStyle = t.dim;
+  x.font = F(600, 40);
+  x.fillText(`Target: financial independence by ${d.targetAge}`, 130, 800);
+  x.fillStyle = t.ink;
+  x.font = F(800, 46);
+  x.fillText('Slow is fine. Quitting is the only way to lose.', 130, 880);
+
+  footer(x, t, d.handle);
+}
+
+// ---------- Card 6: notes ----------
+function drawNotes(x: Ctx, d: any, t: Theme) {
+  bgBase(x, t);
+  header(x, t, 'this month', d.title + ' notes');
+
+  const lines = String(d.notes || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+
+  if (lines.length === 0) {
+    x.fillStyle = t.dim;
+    x.font = F(600, 40);
+    x.fillText('Type your reflections in the Notes box →', 100, 520);
+    return footer(x, t, d.handle);
+  }
+
+  let y = 360;
+  lines.forEach((ln) => {
+    // bullet dot
+    x.beginPath();
+    x.arc(112, y - 14, 12, 0, Math.PI * 2);
+    x.fillStyle = t.accent;
+    x.fill();
+    y = wrapText(x, ln, 152, y, SIZE - 240, 58, t.ink, F(600, 42)) + 46;
+  });
+
+  footer(x, t, d.handle);
+}
+
+/** wrap text, return the y of the last line */
+function wrapText(x: Ctx, txt: string, X: number, Y: number, maxw: number, lh: number, col: string, font: string): number {
+  x.font = font;
+  x.fillStyle = col;
+  x.textAlign = 'left';
+  const words = txt.split(' ');
+  let line = '';
+  let y = Y;
+  for (const w of words) {
+    if (x.measureText(line + w).width > maxw && line) {
+      x.fillText(line.trim(), X, y);
+      line = w + ' ';
+      y += lh;
+    } else line += w + ' ';
+  }
+  x.fillText(line.trim(), X, y);
+  return y;
 }

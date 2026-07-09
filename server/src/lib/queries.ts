@@ -234,16 +234,34 @@ function round(x: number, dp = 2): number {
 // ---- Companion: drift alerts + monthly review ------------------------------
 const DEFAULT_SINGLE_STOCK_CAP = 13; // % of MooMoo portfolio
 
+// Groups of related holdings to watch as a combined bet (from the advisor pack).
+const EXPOSURE_GROUPS: { label: string; symbols: string[]; cap: number }[] = [
+  { label: 'Semiconductors', symbols: ['MRVL', 'MU', 'NVDA', 'AVGO', 'TSM', 'QCOM', 'AMD', 'INTC', 'SMCI'], cap: 35 },
+  { label: 'AI / data-centre', symbols: ['NVDA', 'MRVL', 'AVGO', 'SMCI', 'NOW', 'ORCL'], cap: 30 },
+];
+
 export function driftAlerts(db: Database.Database, cap = DEFAULT_SINGLE_STOCK_CAP) {
   const h: any = holdingsLatest(db);
   const alerts: { level: string; symbol?: string; msg: string }[] = [];
   if (h.summary) {
+    // single-stock caps
     for (const p of h.positions) {
       if (p.asset_class !== 'ETF' && p.pct_portfolio > cap) {
         alerts.push({
           level: 'warn',
           symbol: p.symbol,
           msg: `${p.symbol} is ${p.pct_portfolio.toFixed(1)}% of MooMoo — over your ${cap}% single-stock cap`,
+        });
+      }
+    }
+    // combined-exposure caps (related names stacking up)
+    for (const g of EXPOSURE_GROUPS) {
+      const members = h.positions.filter((p: any) => g.symbols.includes(p.symbol));
+      const total = members.reduce((s: number, p: any) => s + (p.pct_portfolio || 0), 0);
+      if (total > g.cap) {
+        alerts.push({
+          level: 'warn',
+          msg: `${g.label} exposure is ${total.toFixed(1)}% (${members.map((m: any) => m.symbol).join(', ')}) — over your ${g.cap}% cap`,
         });
       }
     }

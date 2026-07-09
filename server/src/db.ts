@@ -184,6 +184,7 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   'ALTER TABLE contributions ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE settings ADD COLUMN nisab REAL NOT NULL DEFAULT 30000',
 ];
 
 export function initSchema(db: Database.Database) {

@@ -127,6 +127,7 @@ app.put('/api/settings', (req, res) => {
     'swr',
     'assistant_model',
     'web_search_enabled',
+    'nisab',
   ];
   const sets: string[] = [];
   const vals: any[] = [];
@@ -489,8 +490,9 @@ app.delete('/api/goals/:id', (req, res) => {
 });
 
 app.get('/api/zakat', (_req, res) => {
+  const nisab = (getSettings(db) as any).nisab ?? 30000;
   const latestDate = (db.prepare('SELECT MAX(date) d FROM snapshots').get() as any)?.d;
-  if (!latestDate) return res.json({ zakatable_wealth: 0, nisab: 30000, zakat_due: 0, bank: 0, investments: 0, liabilities: 0, epf: 0 });
+  if (!latestDate) return res.json({ zakatable_wealth: 0, nisab, zakat_due: 0, bank: 0, investments: 0, liabilities: 0, epf: 0 });
 
   const rows = db.prepare(`
     SELECT a.category, a.is_epf, SUM(s.value) as v
@@ -510,7 +512,6 @@ app.get('/api/zakat', (_req, res) => {
   }
 
   const zakatable_wealth = Math.max(0, bank + (investments - epf) - liabilities);
-  const nisab = 30000;
   const zakat_due = zakatable_wealth >= nisab ? zakatable_wealth * 0.025 : 0;
 
   res.json({

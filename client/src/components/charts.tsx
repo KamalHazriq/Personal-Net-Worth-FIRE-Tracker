@@ -29,15 +29,17 @@ function kFmt(v: number) {
 function ThemedTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-border bg-surface-2 px-3 py-2 shadow-lg text-xs">
-      <div className="font-medium mb-1">{typeof label === 'string' && label.includes('-') ? monthLabel(label) : label}</div>
+    <div className="rounded-lg border-2 border-accent/70 bg-surface px-3.5 py-2.5 text-xs tooltip-shadow min-w-[170px]">
+      <div className="font-semibold text-sm mb-1.5 text-accent">
+        {typeof label === 'string' && label.includes('-') ? monthLabel(label) : label}
+      </div>
       {payload
         .filter((p: any) => p.value != null && p.value !== 0)
         .map((p: any) => (
-          <div key={p.name} className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-sm" style={{ background: p.color || p.fill }} />
+          <div key={p.name} className="flex items-center gap-2 py-0.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: p.color || p.fill }} />
             <span className="text-muted">{p.name}</span>
-            <span className="ml-auto tabular-nums">{rm(p.value)}</span>
+            <span className="ml-auto font-semibold tabular-nums">{rm(p.value)}</span>
           </div>
         ))}
     </div>
@@ -46,18 +48,18 @@ function ThemedTooltip({ active, payload, label }: any) {
 
 export function NetWorthLine({ data, mode }: { data: any[]; mode: string }) {
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer width="100%" height={290}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="date" tickFormatter={monthLabel} tick={axis} tickLine={false} axisLine={{ stroke: grid }} minTickGap={24} />
+        <XAxis dataKey="date" tickFormatter={monthLabel} tick={{ ...axis, fontSize: 10 }} tickLine={false} axisLine={{ stroke: grid }} interval={0} angle={-45} textAnchor="end" height={44} />
         <YAxis tickFormatter={kFmt} tick={axis} tickLine={false} axisLine={false} width={56} />
         <Tooltip content={<ThemedTooltip />} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         {(mode === 'both' || mode === 'with') && (
-          <Line type="monotone" dataKey="netWorth" name="With EPF" stroke={ACCENT} strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="netWorth" name="With EPF" stroke={ACCENT} strokeWidth={2} dot={{ r: 3, fill: ACCENT, strokeWidth: 0 }} activeDot={{ r: 5 }} />
         )}
         {(mode === 'both' || mode === 'excl') && (
-          <Line type="monotone" dataKey="netWorthExEpf" name="Excl. EPF" stroke={GAIN} strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="netWorthExEpf" name="Excl. EPF" stroke={GAIN} strokeWidth={2} dot={{ r: 3, fill: GAIN, strokeWidth: 0 }} activeDot={{ r: 5 }} />
         )}
       </LineChart>
     </ResponsiveContainer>
@@ -69,10 +71,10 @@ export function CategoryArea({ data, keys }: { data: any[]; keys: string[] }) {
     keys.filter((k) => !STACK_ORDER.includes(k)),
   );
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <ResponsiveContainer width="100%" height={300}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="date" tickFormatter={monthLabel} tick={axis} tickLine={false} axisLine={{ stroke: grid }} minTickGap={24} />
+        <XAxis dataKey="date" tickFormatter={monthLabel} tick={{ ...axis, fontSize: 10 }} tickLine={false} axisLine={{ stroke: grid }} interval={0} angle={-45} textAnchor="end" height={44} />
         <YAxis tickFormatter={kFmt} tick={axis} tickLine={false} axisLine={false} width={56} />
         <Tooltip content={<ThemedTooltip />} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -119,10 +121,10 @@ export function AllocationDonut({ items }: { items: { label: string; value: numb
 
 export function InflowBars({ data }: { data: { date: string; inflow: number }[] }) {
   return (
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={240}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         <CartesianGrid stroke={grid} strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="date" tickFormatter={monthLabel} tick={axis} tickLine={false} axisLine={{ stroke: grid }} minTickGap={24} />
+        <XAxis dataKey="date" tickFormatter={monthLabel} tick={{ ...axis, fontSize: 10 }} tickLine={false} axisLine={{ stroke: grid }} interval={0} angle={-45} textAnchor="end" height={44} />
         <YAxis tickFormatter={kFmt} tick={axis} tickLine={false} axisLine={false} width={56} />
         <Tooltip content={<ThemedTooltip />} cursor={{ fill: 'var(--surface-2)' }} />
         <Bar dataKey="inflow" name="Inflow" radius={[3, 3, 0, 0]}>

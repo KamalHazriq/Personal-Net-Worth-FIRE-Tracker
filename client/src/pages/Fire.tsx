@@ -53,6 +53,7 @@ export default function Fire() {
           monthly: a.monthly_amount,
           annualReturn: a.annual_return_rate,
           growth: a.growth,
+          excluded: !!a.excluded,
         })),
       );
     });
@@ -80,11 +81,26 @@ export default function Fire() {
     }).catch(() => {});
   };
 
+  const toggleExcluded = async (id: number) => {
+    setAccts((prev) => prev.map((a) => (a.id === id ? { ...a, excluded: !a.excluded } : a)));
+    await api(`/contributions/${id}/toggle`, { method: 'PATCH' });
+  };
+
+  const toggleAllExcluded = async () => {
+    const anyIncluded = accts.some(a => !a.excluded);
+    const newExcluded = anyIncluded; // if any included, turn all off. else turn all on.
+    const toToggle = accts.filter(a => !!a.excluded !== newExcluded);
+    setAccts(prev => prev.map(a => ({ ...a, excluded: newExcluded })));
+    for (const a of toToggle) {
+      await api(`/contributions/${a.id}/toggle`, { method: 'PATCH' });
+    }
+  };
+
   if (!seed || !inputs || !result) return <div className="text-muted">Loading…</div>;
 
   const fn = result.fireNumber;
   const reached = result.fireAgeAccessible;
-  const accessibleStart = seed.cashStart + accts.filter((a) => !a.is_epf).reduce((s, a) => s + a.startBalance, 0);
+  const accessibleStart = seed.cashStart + accts.filter((a) => !a.is_epf && !a.excluded).reduce((s, a) => s + a.startBalance, 0);
 
   const saveScenario = async () => {
     const name = prompt('Name this scenario (e.g. "RM2,500/mo @12%")');
@@ -181,6 +197,9 @@ export default function Fire() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-muted text-xs border-b border-border">
+                <th className="text-left px-3 py-2 font-medium w-8">
+                  <input type="checkbox" checked={accts.length > 0 && accts.every(a => !a.excluded)} onChange={toggleAllExcluded} className="accent-[var(--accent)]" />
+                </th>
                 <th className="text-left px-3 py-2 font-medium">Account</th>
                 <th className="text-right px-3 py-2 font-medium">Start balance</th>
                 <th className="text-right px-3 py-2 font-medium">Monthly +</th>
@@ -191,7 +210,10 @@ export default function Fire() {
             </thead>
             <tbody>
               {accts.map((a) => (
-                <tr key={a.id} className="border-b border-border/40">
+                <tr key={a.id} className={cn("border-b border-border/40", a.excluded ? "opacity-40" : "")}>
+                  <td className="px-3 py-1.5">
+                    <input type="checkbox" checked={!a.excluded} onChange={() => toggleExcluded(a.id)} className="accent-[var(--accent)]" />
+                  </td>
                   <td className="px-3 py-1.5">
                     <span className="flex items-center gap-1.5">
                       {a.is_epf ? <Lock size={11} className="text-locked" /> : null}
@@ -203,11 +225,14 @@ export default function Fire() {
                   <NumTd value={a.monthly} onCommit={(v) => setAcct(a.id, { monthly: v })} prefix="RM" />
                   <NumTd value={a.annualReturn * 100} onCommit={(v) => setAcct(a.id, { annualReturn: v / 100 })} suffix="%" dp={1} />
                   <NumTd value={a.growth * 100} onCommit={(v) => setAcct(a.id, { growth: v / 100 })} suffix="%" dp={1} />
-                  <td className="px-3 py-1.5 text-right tabular-nums">{rm(projectOne(a, inputs))}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{a.excluded ? '—' : rm(projectOne(a, inputs))}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="p-3 text-xs text-muted border-t border-border">
+          {accts.filter(a => !a.excluded).length} of {accts.length} accounts included · RM {accts.filter(a => !a.excluded).reduce((s, a) => s + a.monthly, 0).toLocaleString()}/mo total contributions
         </div>
       </Card>
 

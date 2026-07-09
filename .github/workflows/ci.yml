@@ -1,0 +1,28 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Type check server
+        run: npx tsc --noEmit -p server/tsconfig.json
+      - name: Type check client
+        run: npx tsc --noEmit -p client/tsconfig.json
+      - name: Unit tests
+        run: npm test
+      - name: Build client
+        run: npm run build

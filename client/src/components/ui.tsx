@@ -8,7 +8,9 @@ export function cn(...a: any[]) {
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn('rounded-xl border border-border bg-surface', className)}>{children}</div>
+    <div className={cn('rounded-xl border border-border bg-surface card-shadow', className)}>
+      {children}
+    </div>
   );
 }
 

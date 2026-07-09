@@ -7,6 +7,7 @@ export interface FireAccount {
   monthly: number;
   annualReturn: number; // 0.12 = 12%
   growth: number; // annual contribution growth
+  excluded?: boolean; // toggle off for simulation
 }
 
 export interface FireInputs {
@@ -68,8 +69,10 @@ export function project(inp: FireInputs): FireResult {
     const yearIndex = Math.floor((m - 1) / 12);
     cash = cash * (1 + cashM);
     inp.accounts.forEach((a, i) => {
-      const contrib = a.monthly * Math.pow(1 + a.growth, yearIndex);
-      balances[i] = balances[i] * (1 + rates[i]) + contrib;
+      const isExcluded = !!a.excluded;
+      const contrib = isExcluded ? 0 : a.monthly * Math.pow(1 + a.growth, yearIndex);
+      const rate = isExcluded ? 0 : rates[i];
+      balances[i] = balances[i] * (1 + rate) + contrib;
     });
     if (m % 12 === 0) record(m);
   }

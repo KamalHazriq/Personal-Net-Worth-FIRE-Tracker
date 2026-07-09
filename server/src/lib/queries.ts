@@ -307,6 +307,7 @@ export function fireSeed(db: Database.Database) {
            COALESCE(c.monthly_amount,0) monthly_amount,
            COALESCE(c.annual_return_rate,0) annual_return_rate,
            COALESCE(c.annual_contribution_growth_rate,0) growth,
+           COALESCE(c.excluded,0) excluded,
            COALESCE((SELECT s.value FROM snapshots s WHERE s.account_id=a.id AND s.date=?), 0) startBalance
          FROM accounts a LEFT JOIN contributions c ON c.account_id=a.id
          WHERE a.category='Investment'

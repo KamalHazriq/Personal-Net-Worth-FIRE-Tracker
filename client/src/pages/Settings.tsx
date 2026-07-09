@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, FileJson, FileSpreadsheet, FileText, KeyRound, CheckCircle2, XCircle, Lock, ShieldCheck } from 'lucide-react';
+import { Download, FileJson, FileSpreadsheet, FileText, KeyRound, CheckCircle2, XCircle, Lock, ShieldCheck, RefreshCw } from 'lucide-react';
 import { api, setToken, clearToken } from '../lib/api';
 import { Card, CardHeader, Field, TextInput, SelectInput, Button } from '../components/ui';
 import { useToast } from '../components/Toast';
@@ -8,6 +8,8 @@ export default function Settings() {
   const [s, setS] = useState<any>(null);
   const [status, setStatus] = useState<any>(null);
   const [saved, setSaved] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     api('/settings').then(setS);
@@ -23,6 +25,21 @@ export default function Settings() {
     });
   };
 
+  const syncRate = async () => {
+    setSyncing(true);
+    try {
+      const res = await api('/settings/sync-rate', { method: 'POST' });
+      if (res.rate) {
+        setS((prev: any) => ({ ...prev, usd_myr_rate: res.rate }));
+        toast(`Rate updated to ${res.rate}`);
+      }
+    } catch {
+      toast('Failed to sync rate');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (!s) return <div className="text-muted">Loading…</div>;
 
   return (
@@ -36,7 +53,12 @@ export default function Settings() {
         <CardHeader title="General" />
         <div className="grid grid-cols-2 gap-4 mt-4">
           <Field label="USD → MYR rate">
-            <TextInput type="number" step="0.01" value={s.usd_myr_rate} onChange={(e) => update({ usd_myr_rate: Number(e.target.value) })} />
+            <div className="flex gap-2">
+              <TextInput type="number" step="0.01" value={s.usd_myr_rate} onChange={(e) => update({ usd_myr_rate: Number(e.target.value) })} />
+              <Button variant="outline" onClick={syncRate} disabled={syncing} title="Sync from open.er-api.com">
+                <RefreshCw size={16} className={syncing ? "animate-spin" : ""} />
+              </Button>
+            </div>
           </Field>
           <Field label="Current age">
             <TextInput type="number" value={s.current_age} onChange={(e) => update({ current_age: Number(e.target.value) })} />

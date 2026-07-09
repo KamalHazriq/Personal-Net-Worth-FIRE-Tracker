@@ -1,0 +1,17 @@
+{
+  "name": "FIRE Tracker",
+  "short_name": "FIRE Tracker",
+  "description": "Personal Net Worth & FIRE Tracker — local-first, Shariah-compliant (MYR)",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#4f8cff",
+  "background_color": "#0b0f17",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

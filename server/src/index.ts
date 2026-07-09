@@ -140,6 +140,35 @@ app.put('/api/settings', (req, res) => {
   res.json(publicSettings());
 });
 
+app.get('/api/settings/exchange-rate', async (_req, res) => {
+  try {
+    const f = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await f.json();
+    if (data && data.rates && data.rates.MYR) {
+      res.json({ rate: data.rates.MYR, source: 'open.er-api.com', asOf: new Date().toISOString() });
+    } else {
+      throw new Error('Invalid format');
+    }
+  } catch (e) {
+    res.json({ rate: (getSettings(db) as any).usd_myr_rate, source: 'fallback', asOf: new Date().toISOString() });
+  }
+});
+
+app.post('/api/settings/sync-rate', async (_req, res) => {
+  try {
+    const f = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await f.json();
+    if (data && data.rates && data.rates.MYR) {
+      db.prepare(`UPDATE settings SET usd_myr_rate=? WHERE id=1`).run(data.rates.MYR);
+      res.json({ ok: true, rate: data.rates.MYR });
+    } else {
+      res.status(500).json({ error: 'Failed to parse rate' });
+    }
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ---- Accounts ----
 app.get('/api/accounts', (_req, res) => {
   res.json(db.prepare('SELECT * FROM accounts ORDER BY category, sort_order').all());
@@ -186,6 +215,47 @@ app.patch('/api/accounts/:id', (req, res) => {
 
 app.delete('/api/accounts/:id', (req, res) => {
   db.prepare('DELETE FROM accounts WHERE id=?').run(Number(req.params.id));
+  res.json({ ok: true });
+});
+
+// ---- Recurring Transactions ----
+app.get('/api/recurring', (_req, res) => {
+  res.json(
+    db.prepare(`
+      SELECT r.*, a.name as account_name
+      FROM recurring_transactions r
+      LEFT JOIN accounts a ON a.id = r.account_id
+      ORDER BY r.name
+    `).all()
+  );
+});
+
+app.post('/api/recurring', (req, res) => {
+  const { name, amount, category = 'expense', frequency = 'monthly', account_id = null } = req.body;
+  if (!name || amount == null) return res.status(400).json({ error: 'name and amount required' });
+  const info = db.prepare(
+    `INSERT INTO recurring_transactions (name, amount, category, frequency, account_id) VALUES (?, ?, ?, ?, ?)`
+  ).run(name, amount, category, frequency, account_id);
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+app.patch('/api/recurring/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const cur = db.prepare('SELECT * FROM recurring_transactions WHERE id=?').get(id) as any;
+  if (!cur) return res.status(404).json({ error: 'not found' });
+  const name = req.body.name ?? cur.name;
+  const amount = req.body.amount ?? cur.amount;
+  const category = req.body.category ?? cur.category;
+  const frequency = req.body.frequency ?? cur.frequency;
+  const account_id = req.body.account_id !== undefined ? req.body.account_id : cur.account_id;
+  db.prepare(
+    `UPDATE recurring_transactions SET name=?, amount=?, category=?, frequency=?, account_id=? WHERE id=?`
+  ).run(name, amount, category, frequency, account_id, id);
+  res.json({ ok: true });
+});
+
+app.delete('/api/recurring/:id', (req, res) => {
+  db.prepare('DELETE FROM recurring_transactions WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
 });
 
@@ -324,6 +394,18 @@ app.patch('/api/contributions/:accountId', (req, res) => {
   res.json({ ok: true });
 });
 
+app.patch('/api/contributions/:accountId/toggle', (req, res) => {
+  const id = Number(req.params.accountId);
+  const cur = db.prepare('SELECT * FROM contributions WHERE account_id=?').get(id) as any;
+  if (!cur) {
+    // create default if missing
+    db.prepare('INSERT INTO contributions (account_id, excluded) VALUES (?, 1)').run(id);
+  } else {
+    db.prepare('UPDATE contributions SET excluded=? WHERE account_id=?').run(cur.excluded ? 0 : 1, id);
+  }
+  res.json({ ok: true });
+});
+
 app.get('/api/scenarios', (_req, res) =>
   res.json(db.prepare('SELECT * FROM scenarios ORDER BY created_at').all()),
 );
@@ -404,6 +486,42 @@ app.patch('/api/goals/:id', (req, res) => {
 app.delete('/api/goals/:id', (req, res) => {
   db.prepare('DELETE FROM goals WHERE id=?').run(Number(req.params.id));
   res.json({ ok: true });
+});
+
+app.get('/api/zakat', (_req, res) => {
+  const latestDate = (db.prepare('SELECT MAX(date) d FROM snapshots').get() as any)?.d;
+  if (!latestDate) return res.json({ zakatable_wealth: 0, nisab: 30000, zakat_due: 0, bank: 0, investments: 0, liabilities: 0, epf: 0 });
+
+  const rows = db.prepare(`
+    SELECT a.category, a.is_epf, SUM(s.value) as v
+    FROM snapshots s JOIN accounts a ON a.id = s.account_id
+    WHERE s.date = ?
+    GROUP BY a.category, a.is_epf
+  `).all(latestDate) as any[];
+
+  let bank = 0, investments = 0, liabilities = 0, epf = 0;
+  for (const r of rows) {
+    if (r.category === 'Bank') bank += r.v;
+    if (r.category === 'Investment') {
+      investments += r.v;
+      if (r.is_epf) epf += r.v;
+    }
+    if (r.category === 'Liability') liabilities += r.v;
+  }
+
+  const zakatable_wealth = Math.max(0, bank + (investments - epf) - liabilities);
+  const nisab = 30000;
+  const zakat_due = zakatable_wealth >= nisab ? zakatable_wealth * 0.025 : 0;
+
+  res.json({
+    zakatable_wealth,
+    nisab,
+    zakat_due,
+    bank,
+    investments,
+    liabilities,
+    epf
+  });
 });
 
 app.get('/api/drift', (_req, res) => res.json(driftAlerts(db)));

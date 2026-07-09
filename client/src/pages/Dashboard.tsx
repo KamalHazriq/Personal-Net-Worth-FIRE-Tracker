@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm, pct, signedRm, monthLabel } from '../lib/format';
-import { Card, CardHeader, Stat, Badge, Toggle, PageSkeleton } from '../components/ui';
+import { Card, CardHeader, Stat, Badge, Toggle, PageSkeleton, cn } from '../components/ui';
+import { X } from 'lucide-react';
 import {
   NetWorthLine,
   CategoryArea,
@@ -17,12 +18,19 @@ export default function Dashboard() {
   const [alloc, setAlloc] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [nwMode, setNwMode] = useState('both');
+  const [dismissedBanner, setDismissedBanner] = useState<string | null>(null);
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null); // null = all history
 
   const load = () =>
     Promise.all([api('/dashboard'), api('/allocation')])
       .then(([dash, a]) => {
         setD(dash);
         setAlloc(a);
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (localStorage.getItem(`dismissed_update_${currentMonth}`)) {
+          setDismissedBanner(currentMonth);
+        }
       })
       .catch((e) => setErr(String(e)));
   useEffect(() => {
@@ -30,14 +38,21 @@ export default function Dashboard() {
   }, []);
   useDataRefresh(load);
 
+  // series shown in the time charts, clipped to the selected range
+  const shownSeries = useMemo(() => {
+    if (!d?.series) return [];
+    if (!range) return d.series;
+    return d.series.filter((s: any) => s.date >= range.from && s.date <= range.to);
+  }, [d, range]);
+
   const inflow = useMemo(() => {
     if (!d?.series) return [];
     const out: { date: string; inflow: number }[] = [];
     for (let i = 1; i < d.series.length; i++) {
       out.push({ date: d.series[i].date, inflow: d.series[i].investment - d.series[i - 1].investment });
     }
-    return out;
-  }, [d]);
+    return range ? out.filter((x) => x.date >= range.from && x.date <= range.to) : out;
+  }, [d, range]);
 
   const catKeys = useMemo(() => {
     if (!d?.series) return [];
@@ -52,15 +67,40 @@ export default function Dashboard() {
 
   const inv = d.invested;
 
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthName = now.toLocaleString('default', { month: 'long' });
+  const shouldShowBanner = now.getDate() > 5 && d.latestDate !== currentMonth && dismissedBanner !== currentMonth;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between flex-wrap gap-2">
+      {shouldShowBanner && (
+        <div className="flex items-center justify-between bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-500 px-4 py-3 rounded-lg text-sm">
+          <div className="flex items-center gap-2">
+            <span>📌</span>
+            <span>You haven't updated {monthName} yet. Go to Accounts to add this month's balances.</span>
+          </div>
+          <button
+            onClick={() => {
+              setDismissedBanner(currentMonth);
+              localStorage.setItem(`dismissed_update_${currentMonth}`, '1');
+            }}
+            className="text-yellow-600/70 hover:text-yellow-600 dark:text-yellow-500/70 dark:hover:text-yellow-500"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <p className="text-sm text-muted mt-1">
-            As of {monthLabel(d.latestDate)} · {d.series.length} months tracked
+            As of {monthLabel(d.latestDate)} ·{' '}
+            {range ? `showing ${shownSeries.length} of ${d.series.length}` : `${d.series.length}`} months tracked
           </p>
         </div>
+        <RangeControl series={d.series} range={range} onChange={setRange} />
       </div>
 
       {/* KPI cards */}
@@ -132,7 +172,7 @@ export default function Dashboard() {
           }
         />
         <div className="p-2">
-          <NetWorthLine data={d.series} mode={nwMode} />
+          <NetWorthLine data={shownSeries} mode={nwMode} />
         </div>
       </Card>
 
@@ -141,7 +181,7 @@ export default function Dashboard() {
         <Card className="lg:col-span-2">
           <CardHeader title="Net Worth by category" subtitle="Stacked over time" />
           <div className="p-2">
-            <CategoryArea data={d.series} keys={catKeys} />
+            <CategoryArea data={shownSeries} keys={catKeys} />
           </div>
         </Card>
 
@@ -169,6 +209,85 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+// Date-range zoom for the time charts: quick presets + from/to month pickers.
+function RangeControl({
+  series,
+  range,
+  onChange,
+}: {
+  series: { date: string }[];
+  range: { from: string; to: string } | null;
+  onChange: (r: { from: string; to: string } | null) => void;
+}) {
+  const dates = series.map((s) => s.date);
+  const last = dates[dates.length - 1];
+  const preset = (n: number | 'ytd' | 'all') => {
+    if (n === 'all') return onChange(null);
+    if (n === 'ytd') return onChange({ from: `${last.slice(0, 4)}-01-01`, to: last });
+    onChange({ from: dates[Math.max(0, dates.length - n)], to: last });
+  };
+  const activePreset = (n: number | 'ytd' | 'all') => {
+    if (n === 'all') return !range;
+    if (!range || range.to !== last) return false;
+    if (n === 'ytd') return range.from === `${last.slice(0, 4)}-01-01`;
+    return range.from === dates[Math.max(0, dates.length - n)];
+  };
+  const sel =
+    'rounded-lg border border-border bg-surface-2 px-2 py-1 text-xs outline-none focus:border-accent';
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <div className="inline-flex rounded-lg border border-border bg-surface-2 p-0.5">
+        {([['All', 'all'], ['12M', 12], ['6M', 6], ['YTD', 'ytd']] as const).map(([label, v]) => (
+          <button
+            key={label}
+            onClick={() => preset(v)}
+            className={cn(
+              'px-2.5 py-1 text-xs rounded-md transition-colors',
+              activePreset(v) ? 'bg-accent text-white' : 'text-muted hover:text-text',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <select
+        value={range?.from ?? dates[0]}
+        onChange={(e) => {
+          const from = e.target.value;
+          const to = range?.to ?? last;
+          onChange({ from, to: to >= from ? to : from });
+        }}
+        className={sel}
+        title="From month"
+      >
+        {dates.map((dt) => (
+          <option key={dt} value={dt}>
+            {monthLabel(dt)}
+          </option>
+        ))}
+      </select>
+      <span className="text-xs text-muted">→</span>
+      <select
+        value={range?.to ?? last}
+        onChange={(e) => {
+          const to = e.target.value;
+          const from = range?.from ?? dates[0];
+          onChange({ from: from <= to ? from : to, to });
+        }}
+        className={sel}
+        title="To month"
+      >
+        {dates.map((dt) => (
+          <option key={dt} value={dt}>
+            {monthLabel(dt)}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

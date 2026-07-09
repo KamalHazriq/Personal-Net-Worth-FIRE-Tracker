@@ -13,6 +13,9 @@
   --gain: #2ec27e;
   --loss: #f6685e;
   --locked: #8b97ab;
+  --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --tooltip-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
 }
 
 :root.light {
@@ -26,6 +29,17 @@
   --gain: #18a058;
   --loss: #e03e3e;
   --locked: #8b97ab;
+  --card-shadow: 0 4px 14px rgba(21, 32, 43, 0.08), 0 1px 3px rgba(21, 32, 43, 0.06);
+  --tooltip-shadow: 0 10px 28px rgba(21, 32, 43, 0.22);
+  color-scheme: light;
+}
+
+/* Theme-aware elevation (plain CSS: Tailwind can't type-infer shadow-[var()]) */
+.card-shadow {
+  box-shadow: var(--card-shadow);
+}
+.tooltip-shadow {
+  box-shadow: var(--tooltip-shadow);
 }
 
 html,

@@ -171,7 +171,20 @@ CREATE INDEX IF NOT EXISTS idx_positions_snapshot ON positions(snapshot_id);
 `;
 
 // Additive migrations for columns added after the initial schema.
-const MIGRATIONS = ['ALTER TABLE settings ADD COLUMN passcode_hash TEXT'];
+const MIGRATIONS = [
+  'ALTER TABLE settings ADD COLUMN passcode_hash TEXT',
+  `CREATE TABLE IF NOT EXISTS recurring_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    amount REAL NOT NULL,
+    category TEXT NOT NULL DEFAULT 'expense',
+    frequency TEXT NOT NULL DEFAULT 'monthly',
+    account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  'ALTER TABLE contributions ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0',
+];
 
 export function initSchema(db: Database.Database) {
   db.exec(SCHEMA);

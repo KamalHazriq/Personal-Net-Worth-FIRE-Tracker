@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Pencil, Trash2, Lock } from 'lucide-react';
+import { Plus, Pencil, Trash2, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
 import { monthLabel } from '../lib/format';
 import { Button, Modal, Field, TextInput, SelectInput, cn, PageSkeleton } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { badgeStyle } from '../lib/palette';
 
 const CATEGORIES = ['Bank', 'Income', 'Liability', 'Investment'];
 const SUBTYPES: Record<string, string[]> = {
@@ -70,6 +71,31 @@ export default function Accounts() {
   const sums = useMemo(() => computeTotals(grid), [grid]);
   const flatIds = useMemo(() => (grid ? grid.groups.flatMap((g) => g.accounts.map((a) => a.id)) : []), [grid]);
 
+  // --- horizontal scroll helpers (one month column ≈ 116px) ---
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const COL_W = 116;
+  // Instant (non-smooth) jumps: reliable in every browser, and spreadsheet-like.
+  const scrollByMonths = (n: number) => {
+    const el = scrollerRef.current;
+    if (el) el.scrollLeft += n * COL_W;
+  };
+  const scrollToLatest = () => {
+    const el = scrollerRef.current;
+    if (!el || !grid) return;
+    let last = -1;
+    grid.months.forEach((m, i) => {
+      if (grid.groups.some((g) => g.accounts.some((a) => a.values[m.date] != null))) last = i;
+    });
+    if (last < 0) return;
+    // place the latest data column near the right edge (180px sticky name col)
+    el.scrollLeft = Math.max(0, 180 + (last + 1) * COL_W - el.clientWidth + 24);
+  };
+  // jump to the newest month with data when the year view (re)loads — not on cell edits
+  useEffect(() => {
+    const t = setTimeout(scrollToLatest, 200);
+    return () => clearTimeout(t);
+  }, [grid?.year]);
+
   // arrow-key / Enter navigation between editable cells
   const moveCell = (id: number, col: number, dir: 'up' | 'down' | 'left' | 'right') => {
     let ri = flatIds.indexOf(id);
@@ -106,20 +132,45 @@ export default function Accounts() {
         </Button>
       </div>
 
-      {/* Year tabs */}
-      <div className="flex gap-1">
-        {yearTabs.map((y) => (
+      {/* Year tabs + scroll controls */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-1">
+          {yearTabs.map((y) => (
+            <button
+              key={y}
+              onClick={() => setYear(y)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-sm',
+                y === grid.year ? 'bg-accent text-white' : 'text-muted hover:text-text hover:bg-surface-2',
+              )}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
           <button
-            key={y}
-            onClick={() => setYear(y)}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-sm',
-              y === grid.year ? 'bg-accent text-white' : 'text-muted hover:text-text hover:bg-surface-2',
-            )}
+            onClick={() => scrollByMonths(-3)}
+            className="p-1.5 rounded-lg border border-border bg-surface-2 text-muted hover:text-text"
+            title="Scroll 3 months back (or Shift+mouse-wheel on the grid)"
           >
-            {y}
+            <ChevronLeft size={16} />
           </button>
-        ))}
+          <button
+            onClick={() => scrollByMonths(3)}
+            className="p-1.5 rounded-lg border border-border bg-surface-2 text-muted hover:text-text"
+            title="Scroll 3 months forward"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <button
+            onClick={scrollToLatest}
+            className="px-2.5 py-1.5 rounded-lg border border-border bg-surface-2 text-xs text-muted hover:text-text"
+            title="Jump to the latest month with data"
+          >
+            Latest ⇥
+          </button>
+        </div>
       </div>
 
       {isEmpty && (
@@ -131,7 +182,7 @@ export default function Accounts() {
       )}
 
       {/* Grid */}
-      <div className="rounded-xl border border-border overflow-auto">
+      <div ref={scrollerRef} className="rounded-xl border border-border overflow-auto">
         <table className="text-sm border-collapse min-w-max">
           <thead>
             <tr className="bg-surface-2">
@@ -141,7 +192,7 @@ export default function Accounts() {
               {months.map((m) => (
                 <th
                   key={m.date}
-                  className="px-3 py-2 text-right font-medium text-muted whitespace-nowrap border-b border-border min-w-[92px]"
+                  className="px-3 py-2 text-right font-medium text-muted whitespace-nowrap border-b border-border min-w-[116px]"
                 >
                   {monthLabel(m.date)}
                   {m.opening && <span className="block text-[9px] text-muted/70">opening</span>}
@@ -163,8 +214,8 @@ export default function Accounts() {
             ))}
 
             {/* TOTAL block */}
-            <tr className="bg-surface-2/70">
-              <td className="sticky left-0 z-10 bg-surface-2/70 px-3 py-2 font-semibold border-t-2 border-border">
+            <tr className="bg-surface-2">
+              <td className="sticky left-0 z-10 bg-surface-2 px-3 py-2 font-semibold border-t-2 border-border">
                 Net Worth
               </td>
               {months.map((m) => (
@@ -258,12 +309,17 @@ function GroupRows({
         </td>
       </tr>
       {grp.accounts.map((a) => (
-        <tr key={a.id} className="group hover:bg-surface-2/40">
-          <td className="sticky left-0 z-10 bg-surface group-hover:bg-surface-2/40 px-3 py-1.5 whitespace-nowrap">
+        <tr key={a.id} className="group hover:bg-surface-2">
+          <td className="sticky left-0 z-10 bg-surface group-hover:bg-surface-2 px-3 py-1.5 whitespace-nowrap">
             <div className="flex items-center gap-1.5">
               {a.is_epf ? <Lock size={12} className="text-locked" /> : null}
               <span>{a.name}</span>
-              <span className="text-[10px] text-muted bg-surface-2 rounded px-1">{a.subtype}</span>
+              <span
+                className="text-[10px] font-medium rounded-md px-1.5 py-0.5 uppercase tracking-wide"
+                style={badgeStyle(a.subtype)}
+              >
+                {a.subtype}
+              </span>
               <button
                 onClick={() => onEdit(a)}
                 className="opacity-0 group-hover:opacity-100 text-muted hover:text-accent ml-auto"
@@ -285,8 +341,8 @@ function GroupRows({
           ))}
         </tr>
       ))}
-      <tr className="bg-surface-2/40">
-        <td className="sticky left-0 z-10 bg-surface-2/40 px-3 py-1.5 text-xs font-semibold text-muted">
+      <tr className="bg-surface-2">
+        <td className="sticky left-0 z-10 bg-surface-2 px-3 py-1.5 text-xs font-semibold text-muted">
           Subtotal — {grp.title}
         </td>
         {months.map((m) => (
@@ -300,7 +356,7 @@ function GroupRows({
 }
 
 function Cell({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cn('px-3 py-1.5 text-right tabular-nums whitespace-nowrap', className)}>{children}</td>;
+  return <td className={cn('px-4 py-1.5 text-right tabular-nums whitespace-nowrap', className)}>{children}</td>;
 }
 
 function DeltaRow({
@@ -393,7 +449,7 @@ function EditableCell({
           el.blur();
         }
       }}
-      className="w-full bg-transparent px-3 py-1.5 text-right tabular-nums outline-none focus:bg-accent/10 focus:ring-1 focus:ring-accent rounded"
+      className="w-[104px] m-1.5 rounded-lg border border-border bg-surface-2 text-text px-2.5 py-1.5 text-right tabular-nums outline-none transition-colors hover:border-muted focus:border-accent focus:shadow-[0_0_0_3px_rgba(79,140,255,0.18)]"
     />
   );
 }

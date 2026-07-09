@@ -5,7 +5,8 @@
   "description": "Local-first Personal Net Worth & FIRE Tracker (MYR, Shariah-compliant)",
   "workspaces": [
     "server",
-    "client"
+    "client",
+    "shared"
   ],
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",

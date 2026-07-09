@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Target, Plus, Trash2, AlertTriangle, CalendarCheck, Loader2 } from 'lucide-react';
+import { Target, Plus, Trash2, AlertTriangle, CalendarCheck, Loader2, Coins } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm } from '../lib/format';
-import { Card, CardHeader, Button, Modal, Field, TextInput, SelectInput, PageSkeleton, cn } from '../components/ui';
+import { Card, CardHeader, Button, Modal, Field, TextInput, SelectInput, PageSkeleton, cn, Badge } from '../components/ui';
 import { useToast } from '../components/Toast';
 
 const GOAL_TYPES = [
@@ -27,8 +27,9 @@ export default function Goals() {
       api('/dashboard'),
       api('/holdings'),
       api('/fire/seed'),
-    ]).then(([goals, drift, reviews, dash, holdings, fire]) =>
-      setData({ goals, drift, reviews, dash, holdings, fire }),
+      api('/zakat'),
+    ]).then(([goals, drift, reviews, dash, holdings, fire, zakat]) =>
+      setData({ goals, drift, reviews, dash, holdings, fire, zakat }),
     );
   useEffect(() => {
     load();
@@ -72,6 +73,38 @@ export default function Goals() {
               <li key={i} className="text-muted">• {a.msg}</li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {/* Zakat calculator */}
+      {data.zakat && (
+        <Card className={cn('p-4', data.zakat.zakatable_wealth >= data.zakat.nisab ? 'border-yellow-500/40' : 'border-gain/40')}>
+          <div className="flex items-center gap-2 mb-3">
+            <Coins size={18} className={data.zakat.zakatable_wealth >= data.zakat.nisab ? 'text-yellow-500' : 'text-gain'} />
+            <h3 className="text-sm font-semibold">Zakat Calculator</h3>
+            <Badge tone={data.zakat.zakatable_wealth >= data.zakat.nisab ? 'loss' : 'gain'}>
+              {data.zakat.zakatable_wealth >= data.zakat.nisab ? 'Zakat due' : 'Below nisab'}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-3 gap-4 mb-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted">Zakatable Wealth</div>
+              <div className="text-lg font-semibold tabular-nums">{rm(data.zakat.zakatable_wealth)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted">Nisab Threshold</div>
+              <div className="text-lg font-semibold tabular-nums">{rm(data.zakat.nisab)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted">Zakat Due (2.5%)</div>
+              <div className={cn('text-lg font-semibold tabular-nums', data.zakat.zakatable_wealth >= data.zakat.nisab ? 'text-yellow-500' : 'text-gain')}>
+                {rm(data.zakat.zakat_due)}
+              </div>
+            </div>
+          </div>
+          <div className="text-xs text-muted">
+            Breakdown: Bank ({rm(data.zakat.bank)}) + Investments ({rm(data.zakat.investments)}) − Liabilities ({rm(data.zakat.liabilities)}) − EPF ({rm(data.zakat.epf)})
+          </div>
         </Card>
       )}
 

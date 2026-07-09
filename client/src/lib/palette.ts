@@ -11,7 +11,16 @@ export const CATEGORY_COLORS: Record<string, string> = {
   MMF: '#5bc0eb',
   HYSA: '#7aa2ff',
   Other: '#6b7787',
+  CreditCard: '#f6685e',
+  Salary: '#2ec27e',
+  Cashback: '#ff8a5c',
 };
+
+/** Tinted chip style for a subtype badge (15% bg, full-strength text). */
+export function badgeStyle(label: string): { background: string; color: string } {
+  const c = colorFor(label);
+  return { background: c + '26', color: c };
+}
 
 export const GAIN = '#2ec27e';
 export const LOSS = '#f6685e';

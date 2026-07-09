@@ -15,6 +15,8 @@ import {
   Menu,
   X,
   MessageCircle,
+  Repeat,
+  Palette,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { cn } from './ui';
@@ -27,7 +29,9 @@ const NAV = [
   { to: '/holdings', label: 'Holdings', icon: PieChart },
   { to: '/fire', label: 'FIRE', icon: Flame },
   { to: '/goals', label: 'Goals', icon: Target },
+  { to: '/recurring', label: 'Recurring', icon: Repeat },
   { to: '/playbook', label: 'Playbook', icon: BookOpen },
+  { to: '/studio', label: 'Studio', icon: Palette },
   { to: '/assistant', label: 'Assistant', icon: Sparkles },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Download, FileJson, FileSpreadsheet, FileText, KeyRound, CheckCircle2, XCircle, Lock, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Download, FileJson, FileSpreadsheet, FileText, KeyRound, CheckCircle2, XCircle, Lock, ShieldCheck, RefreshCw, Sparkles, Settings as SettingsIcon } from 'lucide-react';
 import { api, setToken, clearToken } from '../lib/api';
-import { Card, CardHeader, Field, TextInput, SelectInput, Button } from '../components/ui';
+import { Card, CardHeader, Field, TextInput, SelectInput, Button, Toggle, PageSkeleton, PageHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useUiVersion } from '../lib/uiVersion';
 
 export default function Settings() {
   const [s, setS] = useState<any>(null);
@@ -10,6 +11,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const toast = useToast();
+  const ui = useUiVersion();
 
   useEffect(() => {
     api('/settings').then(setS);
@@ -40,14 +42,46 @@ export default function Settings() {
     }
   };
 
-  if (!s) return <div className="text-muted">Loading…</div>;
+  if (!s) return <PageSkeleton />;
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted mt-1">Everything is stored locally. {saved && <span className="text-gain">Saved ✓</span>}</p>
-      </div>
+      <PageHeader
+        icon={SettingsIcon}
+        title="Settings"
+        subtitle={
+          <>
+            Everything is stored locally. {saved && <span className="text-gain">Saved ✓</span>}
+          </>
+        }
+      />
+
+      <Card className="p-5">
+        <CardHeader
+          title="Appearance"
+          subtitle="Experimental redesign — grouped navigation, refined cards. Safe to flip back anytime."
+        />
+        <div className="mt-4 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Sparkles size={16} className={ui.version === 'new' ? 'text-accent' : 'text-muted'} />
+            <span>
+              {ui.version === 'new' ? (
+                <span className="text-accent font-medium">New UI is on</span>
+              ) : (
+                'Classic UI'
+              )}
+            </span>
+          </div>
+          <Toggle
+            value={ui.version}
+            onChange={(v) => ui.setVersion(v as any)}
+            options={[
+              { label: 'Classic', value: 'classic' },
+              { label: 'New UI', value: 'new' },
+            ]}
+          />
+        </div>
+      </Card>
 
       <Card className="p-5">
         <CardHeader title="General" />

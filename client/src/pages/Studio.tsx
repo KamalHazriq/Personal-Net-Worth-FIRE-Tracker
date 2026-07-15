@@ -166,6 +166,7 @@ export default function Studio() {
                 <button
                   key={p.name}
                   title={p.name}
+                  aria-label={`Use ${p.name} theme`}
                   onClick={() => setTheme(p.t)}
                   className="w-7 h-7 rounded-lg border border-border"
                   style={{ background: `linear-gradient(135deg, ${p.t.bgTop}, ${p.t.bgBottom})` }}

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Pencil, Trash2, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, Lock, ChevronLeft, ChevronRight, Table2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { monthLabel } from '../lib/format';
-import { Button, Modal, Field, TextInput, SelectInput, cn, PageSkeleton } from '../components/ui';
+import { Button, Modal, Field, TextInput, SelectInput, cn, PageSkeleton, PageHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/Confirm';
 import { badgeStyle } from '../lib/palette';
 
 const CATEGORIES = ['Bank', 'Income', 'Liability', 'Investment'];
@@ -119,18 +120,21 @@ export default function Accounts() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Accounts</h1>
-          <p className="text-sm text-muted mt-1">
+      <PageHeader
+        icon={Table2}
+        title="Accounts"
+        subtitle={
+          <>
             Excel-like grid · arrow keys to move · totals compute live
             <span className={cn('ml-2 text-gain transition-opacity', saved ? 'opacity-100' : 'opacity-0')}>Saved ✓</span>
-          </p>
-        </div>
-        <Button onClick={() => setAdding(true)}>
-          <Plus size={16} /> Add account
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={() => setAdding(true)}>
+            <Plus size={16} /> Add account
+          </Button>
+        }
+      />
 
       {/* Year tabs + scroll controls */}
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -322,7 +326,8 @@ function GroupRows({
               </span>
               <button
                 onClick={() => onEdit(a)}
-                className="opacity-0 group-hover:opacity-100 text-muted hover:text-accent ml-auto"
+                className="opacity-60 md:opacity-0 md:group-hover:opacity-100 text-muted hover:text-accent ml-auto p-1 -m-1 rounded"
+                aria-label={`Edit ${a.name}`}
                 title="Edit account"
               >
                 <Pencil size={12} />
@@ -460,6 +465,7 @@ function AccountEditor({ acct, onClose, onSaved }: { acct: Acct; onClose: () => 
   const [subtype, setSubtype] = useState(acct.subtype);
   const [isEpf, setIsEpf] = useState(!!acct.is_epf);
   const [isLiquid, setIsLiquid] = useState(!!acct.is_liquid);
+  const confirmDialog = useConfirm();
 
   const save = async () => {
     await api(`/accounts/${acct.id}`, {
@@ -469,7 +475,13 @@ function AccountEditor({ acct, onClose, onSaved }: { acct: Acct; onClose: () => 
     onSaved();
   };
   const del = async () => {
-    if (!confirm(`Delete "${acct.name}" and all its history? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: `Delete "${acct.name}"?`,
+      body: 'This removes the account and all its monthly history. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     await api(`/accounts/${acct.id}`, { method: 'DELETE' });
     onSaved();
   };

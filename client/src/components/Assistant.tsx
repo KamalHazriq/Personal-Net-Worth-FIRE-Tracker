@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Sparkles, Send, AlertTriangle, Globe, X, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button, cn } from './ui';
@@ -149,17 +149,35 @@ export function AssistantChat({ compact = false }: { compact?: boolean }) {
 }
 
 export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <aside className="fixed z-50 right-0 top-0 h-full w-full sm:w-[420px] bg-surface border-l border-border flex flex-col p-4">
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="fixed z-50 right-0 top-0 h-full w-full sm:w-[420px] bg-surface border-l border-border flex flex-col p-4"
+      >
         <div className="flex items-center justify-between mb-3 shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-accent" />
-            <span className="font-semibold">My Finances</span>
+            <span id={titleId} className="font-semibold">My Finances</span>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-text"><X size={18} /></button>
+          <button onClick={onClose} aria-label="Close assistant panel" className="text-muted hover:text-text icon-btn -mr-2">
+            <X size={18} />
+          </button>
         </div>
         <AssistantChat compact />
       </aside>

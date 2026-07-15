@@ -78,11 +78,11 @@ export default function Goals() {
 
       {/* Zakat calculator */}
       {data.zakat && (
-        <Card className={cn('p-4', data.zakat.zakatable_wealth >= data.zakat.nisab ? 'border-yellow-500/40' : 'border-gain/40')}>
+        <Card className={cn('p-4 border', data.zakat.zakatable_wealth >= data.zakat.nisab ? 'border-warn' : 'border-gain/40')}>
           <div className="flex items-center gap-2 mb-3">
-            <Coins size={18} className={data.zakat.zakatable_wealth >= data.zakat.nisab ? 'text-yellow-500' : 'text-gain'} />
+            <Coins size={18} className={data.zakat.zakatable_wealth >= data.zakat.nisab ? 'text-warn' : 'text-gain'} />
             <h3 className="text-sm font-semibold">Zakat Calculator</h3>
-            <Badge tone={data.zakat.zakatable_wealth >= data.zakat.nisab ? 'loss' : 'gain'}>
+            <Badge tone={data.zakat.zakatable_wealth >= data.zakat.nisab ? 'warn' : 'gain'}>
               {data.zakat.zakatable_wealth >= data.zakat.nisab ? 'Zakat due' : 'Below nisab'}
             </Badge>
           </div>
@@ -97,7 +97,7 @@ export default function Goals() {
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-wide text-muted">Zakat Due (2.5%)</div>
-              <div className={cn('text-lg font-semibold tabular-nums', data.zakat.zakatable_wealth >= data.zakat.nisab ? 'text-yellow-500' : 'text-gain')}>
+              <div className={cn('text-lg font-semibold tabular-nums', data.zakat.zakatable_wealth >= data.zakat.nisab ? 'text-warn' : 'text-gain')}>
                 {rm(data.zakat.zakat_due)}
               </div>
             </div>
@@ -175,7 +175,13 @@ function GoalCard({ goal, data, onDelete }: { goal: any; data: any; onDelete: ()
           <div className="font-medium">{goal.label}</div>
           <div className="text-xs text-muted">{p.sub}</div>
         </div>
-        <button onClick={onDelete} className="opacity-0 group-hover:opacity-100 text-muted hover:text-loss"><Trash2 size={13} /></button>
+        <button
+          onClick={onDelete}
+          aria-label={`Delete goal: ${goal.label}`}
+          className="opacity-60 md:opacity-0 md:group-hover:opacity-100 text-muted hover:text-loss icon-btn -m-2"
+        >
+          <Trash2 size={13} />
+        </button>
       </div>
       <div className="mt-3 flex items-end justify-between text-sm">
         <span className="font-semibold tabular-nums">{p.fmt(p.current)}</span>

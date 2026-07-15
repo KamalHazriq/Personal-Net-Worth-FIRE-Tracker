@@ -13,7 +13,7 @@ import {
 import { Flame, Lock, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { rm, pct } from '../lib/format';
-import { Card, CardHeader, Stat, Badge, Button, cn } from '../components/ui';
+import { Card, CardHeader, Stat, Badge, Button, cn, PageSkeleton } from '../components/ui';
 import {
   project,
   sensitivity,
@@ -96,7 +96,7 @@ export default function Fire() {
     }
   };
 
-  if (!seed || !inputs || !result) return <div className="text-muted">Loading…</div>;
+  if (!seed || !inputs || !result) return <PageSkeleton />;
 
   const fn = result.fireNumber;
   const reached = result.fireAgeAccessible;
@@ -385,7 +385,13 @@ function ScenarioCompare({ scenarios, compareIds, setCompareIds, base, onDelete 
               onChange={(e) => setCompareIds((c: number[]) => (e.target.checked ? [...c, s.id] : c.filter((x) => x !== s.id)))}
             />
             {s.name}
-            <button onClick={(e) => { e.preventDefault(); onDelete(s.id); }} className="text-muted hover:text-loss"><Trash2 size={11} /></button>
+            <button
+              onClick={(e) => { e.preventDefault(); onDelete(s.id); }}
+              aria-label={`Delete scenario ${s.name}`}
+              className="text-muted hover:text-loss p-1 -m-1 rounded"
+            >
+              <Trash2 size={11} />
+            </button>
           </label>
         ))}
       </div>

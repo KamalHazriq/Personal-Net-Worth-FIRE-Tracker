@@ -16,6 +16,7 @@ import {
   cn,
 } from '../components/ui';
 import { useToast } from '../components/Toast';
+import { useConfirm } from '../components/Confirm';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -84,6 +85,7 @@ function toMonthly(amount: number, frequency: string): number {
 
 export default function Recurring() {
   const toast = useToast();
+  const confirmDialog = useConfirm();
 
   const [transactions, setTransactions] = useState<RecurringTransaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -195,8 +197,14 @@ export default function Recurring() {
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!window.confirm('Delete this recurring transaction?')) return;
+  async function handleDelete(id: number, name: string) {
+    const ok = await confirmDialog({
+      title: `Delete "${name}"?`,
+      body: 'This removes it from your recurring list. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api(`/recurring/${id}`, { method: 'DELETE' });
       toast('Transaction deleted');
@@ -288,10 +296,10 @@ export default function Recurring() {
                     <td className="px-3 py-2 text-muted">{tx.account_name ?? '—'}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(tx)}>
+                        <Button variant="ghost" size="sm" ariaLabel={`Edit ${tx.name}`} onClick={() => openEdit(tx)} className="icon-btn">
                           <Pencil size={14} />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(tx.id)}>
+                        <Button variant="ghost" size="sm" ariaLabel={`Delete ${tx.name}`} onClick={() => handleDelete(tx.id, tx.name)} className="icon-btn">
                           <Trash2 size={14} className="text-red-400" />
                         </Button>
                       </div>

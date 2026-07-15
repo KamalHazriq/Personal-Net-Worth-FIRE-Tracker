@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, BookOpen } from 'lucide-react';
 import { api } from '../lib/api';
 import { Card, Button, Modal, Field, TextInput } from '../components/ui';
+import { useConfirm } from '../components/Confirm';
 
 export default function Playbook() {
   const [rules, setRules] = useState<any[]>([]);
   const [editing, setEditing] = useState<any>(null); // rule or {} for new
+  const confirmDialog = useConfirm();
 
   const load = () => api('/playbook').then(setRules);
   useEffect(() => {
@@ -34,16 +36,28 @@ export default function Playbook() {
           <Card key={r.id} className="p-5 group">
             <div className="flex items-start justify-between">
               <h3 className="font-semibold text-accent">{r.title}</h3>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => setEditing(r)} className="text-muted hover:text-accent"><Pencil size={14} /></button>
+              <div className="flex gap-1 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => setEditing(r)}
+                  aria-label={`Edit "${r.title}"`}
+                  className="icon-btn text-muted hover:text-accent"
+                >
+                  <Pencil size={14} />
+                </button>
                 <button
                   onClick={async () => {
-                    if (confirm(`Delete "${r.title}"?`)) {
+                    const ok = await confirmDialog({
+                      title: `Delete "${r.title}"?`,
+                      confirmLabel: 'Delete',
+                      danger: true,
+                    });
+                    if (ok) {
                       await api(`/playbook/${r.id}`, { method: 'DELETE' });
                       load();
                     }
                   }}
-                  className="text-muted hover:text-loss"
+                  aria-label={`Delete "${r.title}"`}
+                  className="icon-btn text-muted hover:text-loss"
                 >
                   <Trash2 size={14} />
                 </button>

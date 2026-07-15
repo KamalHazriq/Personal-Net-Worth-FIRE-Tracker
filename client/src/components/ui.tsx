@@ -1,6 +1,7 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useId, useRef } from 'react';
 import { twMerge } from 'tailwind-merge';
 import clsx from 'clsx';
+import { useUiVersion } from '../lib/uiVersion';
 
 export function cn(...a: any[]) {
   return twMerge(clsx(a));
@@ -29,6 +30,43 @@ export function PageSkeleton() {
         ))}
       </div>
       <Skeleton className="h-64" />
+    </div>
+  );
+}
+
+/**
+ * Standard page-level heading: title + subtitle + trailing actions. Renders
+ * identically to the hand-written `<h1>` block every page used to have — under
+ * "New UI" (Settings → Appearance) it escalates to a larger title and an
+ * optional icon badge, matching the refined nav/card tokens.
+ */
+export function PageHeader({
+  title,
+  subtitle,
+  actions,
+  icon: Icon,
+}: {
+  title: string;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+  icon?: any;
+}) {
+  const { version } = useUiVersion();
+  const isNew = version === 'new';
+  return (
+    <div className={cn('flex items-end flex-wrap gap-3', actions && 'justify-between')}>
+      <div className={cn('flex items-center', isNew && Icon ? 'gap-3' : '')}>
+        {Icon && isNew && (
+          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-accent/15 text-accent shrink-0">
+            <Icon size={22} />
+          </div>
+        )}
+        <div>
+          <h1 className={cn('font-semibold', isNew ? 'text-3xl tracking-tight' : 'text-2xl')}>{title}</h1>
+          {subtitle && <p className="text-sm text-muted mt-1">{subtitle}</p>}
+        </div>
+      </div>
+      {actions}
     </div>
   );
 }
@@ -70,13 +108,15 @@ export function Stat({
   );
 }
 
-export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'gain' | 'loss' | 'neutral' }) {
+export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'gain' | 'loss' | 'warn' | 'neutral' }) {
   const c =
     tone === 'gain'
       ? 'bg-gain/15 text-gain'
       : tone === 'loss'
         ? 'bg-loss/15 text-loss'
-        : 'bg-surface-2 text-muted';
+        : tone === 'warn'
+          ? 'bg-warn-soft text-warn'
+          : 'bg-surface-2 text-muted';
   return <span className={cn('inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium', c)}>{children}</span>;
 }
 
@@ -89,6 +129,7 @@ export function Button({
   type = 'button',
   disabled,
   title,
+  ariaLabel,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -98,6 +139,7 @@ export function Button({
   type?: 'button' | 'submit';
   disabled?: boolean;
   title?: string;
+  ariaLabel?: string;
 }) {
   const v =
     variant === 'default'
@@ -114,6 +156,7 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={ariaLabel ?? title}
       className={cn('inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-50', v, s, className)}
     >
       {children}
@@ -132,15 +175,48 @@ export function Modal({
   title: string;
   children: ReactNode;
 }) {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+
+  // ESC-to-close, initial focus, and focus restore on close — runs whenever
+  // `open` toggles; hooks must stay unconditional even though we render null below.
+  useEffect(() => {
+    if (!open) return;
+    previouslyFocused.current = document.activeElement as HTMLElement;
+    const t = setTimeout(() => {
+      const first = dialogRef.current?.querySelector<HTMLElement>(
+        'input, select, textarea, button, [tabindex]:not([tabindex="-1"])',
+      );
+      (first ?? dialogRef.current)?.focus();
+    }, 0);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('keydown', onKey);
+      previouslyFocused.current?.focus?.();
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="relative w-full max-w-md border border-border bg-surface card-radius card-shadow p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-base font-semibold mb-4">{title}</h3>
+        <h3 id={titleId} className="text-base font-semibold mb-4">
+          {title}
+        </h3>
         {children}
       </div>
     </div>

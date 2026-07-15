@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm, pct, signedRm, monthLabel } from '../lib/format';
-import { Card, CardHeader, Stat, Badge, Toggle, PageSkeleton, cn } from '../components/ui';
-import { X } from 'lucide-react';
+import { Card, CardHeader, Stat, Badge, Toggle, PageSkeleton, PageHeader, cn } from '../components/ui';
+import { X, LayoutDashboard } from 'lucide-react';
 import {
   NetWorthLine,
   CategoryArea,
@@ -75,9 +75,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {shouldShowBanner && (
-        <div className="flex items-center justify-between bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-500 px-4 py-3 rounded-lg text-sm">
+        <div className="flex items-center justify-between bg-warn-soft border border-warn text-warn px-4 py-3 rounded-lg text-sm">
           <div className="flex items-center gap-2">
-            <span>📌</span>
+            <span aria-hidden="true">📌</span>
             <span>You haven't updated {monthName} yet. Go to Accounts to add this month's balances.</span>
           </div>
           <button
@@ -85,23 +85,25 @@ export default function Dashboard() {
               setDismissedBanner(currentMonth);
               localStorage.setItem(`dismissed_update_${currentMonth}`, '1');
             }}
-            className="text-yellow-600/70 hover:text-yellow-600 dark:text-yellow-500/70 dark:hover:text-yellow-500"
+            aria-label="Dismiss reminder"
+            className="text-warn/70 hover:text-warn icon-btn"
           >
             <X size={16} />
           </button>
         </div>
       )}
 
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted mt-1">
+      <PageHeader
+        icon={LayoutDashboard}
+        title="Dashboard"
+        subtitle={
+          <>
             As of {monthLabel(d.latestDate)} ·{' '}
             {range ? `showing ${shownSeries.length} of ${d.series.length}` : `${d.series.length}`} months tracked
-          </p>
-        </div>
-        <RangeControl series={d.series} range={range} onChange={setRange} />
-      </div>
+          </>
+        }
+        actions={<RangeControl series={d.series} range={range} onChange={setRange} />}
+      />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -13,7 +13,7 @@ import {
 import { Flame, Lock, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { rm, pct } from '../lib/format';
-import { Card, CardHeader, Stat, Badge, Button, cn, PageSkeleton } from '../components/ui';
+import { Card, CardHeader, Stat, Badge, Button, cn, PageSkeleton, PageHeader, Modal, Field, TextInput } from '../components/ui';
 import {
   project,
   sensitivity,
@@ -31,6 +31,7 @@ export default function Fire() {
   const [accts, setAccts] = useState<FireAccount[]>([]);
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [namingScenario, setNamingScenario] = useState(false);
 
   useEffect(() => {
     api('/fire/seed').then((d) => {
@@ -102,23 +103,20 @@ export default function Fire() {
   const reached = result.fireAgeAccessible;
   const accessibleStart = seed.cashStart + accts.filter((a) => !a.is_epf && !a.excluded).reduce((s, a) => s + a.startBalance, 0);
 
-  const saveScenario = async () => {
-    const name = prompt('Name this scenario (e.g. "RM2,500/mo @12%")');
-    if (!name) return;
+  const saveScenario = async (name: string) => {
     const params_json = JSON.stringify({ ...p, cashStart: seed.cashStart, accounts: accts });
     const sc = await api('/scenarios', { method: 'POST', body: JSON.stringify({ name, params_json }) });
     setScenarios((s) => [...s, sc]);
+    setNamingScenario(false);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Flame className="text-accent" />
-        <div>
-          <h1 className="text-2xl font-semibold">FIRE Simulation</h1>
-          <p className="text-sm text-muted">Compounding projection of your accessible (non-EPF) money to retirement</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Flame}
+        title="FIRE Simulation"
+        subtitle="Compounding projection of your accessible (non-EPF) money to retirement"
+      />
 
       {/* Global inputs */}
       <Card className="p-4">
@@ -303,7 +301,7 @@ export default function Fire() {
         <CardHeader
           title="Scenario comparison"
           subtitle="Save the current setup and compare up to 3 side by side"
-          action={<Button onClick={saveScenario}><Plus size={14} /> Save current</Button>}
+          action={<Button onClick={() => setNamingScenario(true)}><Plus size={14} /> Save current</Button>}
         />
         <ScenarioCompare
           scenarios={scenarios}
@@ -317,7 +315,36 @@ export default function Fire() {
           }}
         />
       </Card>
+
+      {namingScenario && <SaveScenarioModal onClose={() => setNamingScenario(false)} onSave={saveScenario} />}
     </div>
+  );
+}
+
+/** Themed replacement for the old native prompt() when naming a scenario. */
+function SaveScenarioModal({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {
+  const [name, setName] = useState('');
+  const submit = () => {
+    if (name.trim()) onSave(name.trim());
+  };
+  return (
+    <Modal open onClose={onClose} title="Save scenario">
+      <Field label="Scenario name">
+        <TextInput
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit();
+          }}
+          placeholder='e.g. "RM2,500/mo @12%"'
+          autoFocus
+        />
+      </Field>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button onClick={submit} disabled={!name.trim()}>Save</Button>
+      </div>
+    </Modal>
   );
 }
 

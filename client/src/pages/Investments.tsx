@@ -14,9 +14,10 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import { TrendingUp } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm, pct, monthLabel, signedRm } from '../lib/format';
-import { Card, CardHeader, Stat, Badge, cn, PageSkeleton } from '../components/ui';
+import { Card, CardHeader, Stat, Badge, cn, PageSkeleton, PageHeader } from '../components/ui';
 import { colorFor } from '../lib/palette';
 
 const SERIES_COLORS = ['#4f8cff', '#2ec27e', '#f5b301', '#a06bff', '#ff8a5c', '#5bc0eb', '#f6685e'];
@@ -60,10 +61,11 @@ export default function Investments() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Investments P/L</h1>
-        <p className="text-sm text-muted mt-1">Per-platform capital, profit/loss and returns · plus crypto breakdown</p>
-      </div>
+      <PageHeader
+        icon={TrendingUp}
+        title="Investments P/L"
+        subtitle="Per-platform capital, profit/loss and returns · plus crypto breakdown"
+      />
 
       <div className="flex gap-1">
         {yearTabs.map((y: number) => (

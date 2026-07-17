@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-export type UiVersion = 'classic' | 'new';
+export type UiVersion = 'classic' | 'new' | 'v3';
 
 function apply(version: UiVersion) {
   document.documentElement.setAttribute('data-ui', version);

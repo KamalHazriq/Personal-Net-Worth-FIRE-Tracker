@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, BookOpen } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card, Button, Modal, Field, TextInput } from '../components/ui';
+import { Card, Button, Modal, Field, TextInput, PageHeader } from '../components/ui';
 import { useConfirm } from '../components/Confirm';
 
 export default function Playbook() {
@@ -16,18 +16,16 @@ export default function Playbook() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <BookOpen className="text-accent" />
-          <div>
-            <h1 className="text-2xl font-semibold">Playbook</h1>
-            <p className="text-sm text-muted">Your own rules — the discipline you follow when emotions run high</p>
-          </div>
-        </div>
-        <Button onClick={() => setEditing({ title: '', body: '' })}>
-          <Plus size={16} /> Add rule
-        </Button>
-      </div>
+      <PageHeader
+        icon={BookOpen}
+        title="Playbook"
+        subtitle="Your own rules — the discipline you follow when emotions run high"
+        actions={
+          <Button onClick={() => setEditing({ title: '', body: '' })}>
+            <Plus size={16} /> Add rule
+          </Button>
+        }
+      />
 
       {rules.length === 0 && <Card className="p-8 text-center text-muted">No rules yet. Add your first playbook card.</Card>}
 

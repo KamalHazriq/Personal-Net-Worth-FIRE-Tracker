@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Target, Plus, Trash2, AlertTriangle, CalendarCheck, Loader2, Coins } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm } from '../lib/format';
-import { Card, CardHeader, Button, Modal, Field, TextInput, SelectInput, PageSkeleton, cn, Badge } from '../components/ui';
+import { Card, CardHeader, Button, Modal, Field, TextInput, SelectInput, PageSkeleton, PageHeader, cn, Badge } from '../components/ui';
 import { useToast } from '../components/Toast';
 
 const GOAL_TYPES = [
@@ -51,16 +51,12 @@ export default function Goals() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <Target className="text-accent" />
-          <div>
-            <h1 className="text-2xl font-semibold">Goals &amp; Companion</h1>
-            <p className="text-sm text-muted">Progress is computed locally from your real numbers</p>
-          </div>
-        </div>
-        <Button onClick={() => setAdding(true)}><Plus size={16} /> Add goal</Button>
-      </div>
+      <PageHeader
+        icon={Target}
+        title="Goals & Companion"
+        subtitle="Progress is computed locally from your real numbers"
+        actions={<Button onClick={() => setAdding(true)}><Plus size={16} /> Add goal</Button>}
+      />
 
       {/* drift alerts */}
       {data.drift.alerts.length > 0 && (

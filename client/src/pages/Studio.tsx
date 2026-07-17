@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Palette, Download, Copy, RefreshCw } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
 import { monthLabel } from '../lib/format';
-import { Card, CardHeader, Button, Field, TextInput, Toggle, PageSkeleton, cn } from '../components/ui';
+import { Card, CardHeader, Button, Field, TextInput, Toggle, PageSkeleton, PageHeader, cn } from '../components/ui';
 import { useToast } from '../components/Toast';
 
 /**
@@ -130,16 +130,11 @@ export default function Studio() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Palette className="text-accent" />
-        <div>
-          <h1 className="text-2xl font-semibold">Studio</h1>
-          <p className="text-sm text-muted">
-            1080×1080 cards from your live numbers — download or copy, then post. Your handle & theme stay on this
-            machine.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Palette}
+        title="Studio"
+        subtitle="1080×1080 cards from your live numbers — download or copy, then post. Your handle & theme stay on this machine."
+      />
 
       {/* Controls */}
       <Card className="p-4">

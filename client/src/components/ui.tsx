@@ -52,7 +52,7 @@ export function PageHeader({
   icon?: any;
 }) {
   const { version } = useUiVersion();
-  const isNew = version === 'new';
+  const isNew = version !== 'classic'; // 'new' and 'v3' both get the escalated header
   return (
     <div className={cn('flex items-end flex-wrap gap-3', actions && 'justify-between')}>
       <div className={cn('flex items-center', isNew && Icon ? 'gap-3' : '')}>
@@ -96,12 +96,15 @@ export function Stat({
   tone?: 'neutral' | 'gain' | 'loss' | 'locked';
   children?: ReactNode;
 }) {
+  const { version } = useUiVersion();
   const toneClass =
     tone === 'gain' ? 'text-gain' : tone === 'loss' ? 'text-loss' : tone === 'locked' ? 'text-locked' : 'text-text';
   return (
-    <Card className="p-4 flex flex-col gap-1">
+    <Card className={cn('flex flex-col gap-1', version === 'v3' ? 'p-5' : 'p-4')}>
       <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={cn('text-xl font-semibold tabular-nums', toneClass)}>{value}</div>
+      <div className={cn('font-semibold tabular-nums', version === 'v3' ? 'text-2xl tracking-tight' : 'text-xl', toneClass)}>
+        {value}
+      </div>
       {sub && <div className="text-xs text-muted">{sub}</div>}
       {children}
     </Card>
@@ -157,7 +160,7 @@ export function Button({
       disabled={disabled}
       title={title}
       aria-label={ariaLabel ?? title}
-      className={cn('inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-50', v, s, className)}
+      className={cn('inline-flex items-center gap-1.5 control-radius font-medium transition-colors disabled:opacity-50', v, s, className)}
     >
       {children}
     </button>
@@ -237,7 +240,7 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cn(
-        'w-full rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm outline-none focus:border-accent',
+        'w-full control-radius border border-border bg-surface-2 px-3 py-1.5 text-sm outline-none focus:border-accent',
         props.className,
       )}
     />
@@ -249,7 +252,7 @@ export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>
     <select
       {...props}
       className={cn(
-        'w-full rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm outline-none focus:border-accent',
+        'w-full control-radius border border-border bg-surface-2 px-3 py-1.5 text-sm outline-none focus:border-accent',
         props.className,
       )}
     />
@@ -266,7 +269,7 @@ export function Toggle({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-border bg-surface-2 p-0.5">
+    <div className="inline-flex control-radius border border-border bg-surface-2 p-0.5">
       {options.map((o) => (
         <button
           key={o.value}

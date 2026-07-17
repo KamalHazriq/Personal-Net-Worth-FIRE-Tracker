@@ -59,7 +59,7 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string; icon: any
 export default function Layout({ children }: { children: ReactNode }) {
   const { theme, toggle } = useTheme();
   const { version } = useUiVersion();
-  const isNew = version === 'new';
+  const isNew = version !== 'classic'; // grouped nav for both 'new' and 'v3'
   const [open, setOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
 

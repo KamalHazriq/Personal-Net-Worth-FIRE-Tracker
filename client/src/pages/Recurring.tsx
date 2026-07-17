@@ -13,6 +13,7 @@ import {
   TextInput,
   SelectInput,
   PageSkeleton,
+  PageHeader,
   cn,
 } from '../components/ui';
 import { useToast } from '../components/Toast';
@@ -222,15 +223,11 @@ export default function Recurring() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <Repeat className="text-accent" />
-        <div>
-          <h1 className="text-2xl font-semibold">Recurring Transactions</h1>
-          <p className="text-sm text-muted">
-            Track your bills, subscriptions, and regular income.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Repeat}
+        title="Recurring Transactions"
+        subtitle="Track your bills, subscriptions, and regular income."
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-4">

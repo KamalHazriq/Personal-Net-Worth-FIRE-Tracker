@@ -12,10 +12,10 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
-import { Upload, ArrowRightCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Upload, ArrowRightCircle, TrendingUp, TrendingDown, PieChart as PieChartIcon } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm, usd, pct } from '../lib/format';
-import { Card, CardHeader, Stat, Badge, Button, Toggle, Modal, Field, TextInput, cn, PageSkeleton } from '../components/ui';
+import { Card, CardHeader, Stat, Badge, Button, Toggle, Modal, Field, TextInput, cn, PageSkeleton, PageHeader } from '../components/ui';
 
 const COLORS = ['#4f8cff', '#2ec27e', '#f5b301', '#a06bff', '#ff8a5c', '#5bc0eb', '#f6685e', '#19b3a6', '#7aa2ff', '#e879f9'];
 
@@ -59,7 +59,7 @@ export default function Holdings() {
   if (!h.snapshot) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Holdings</h1>
+        <PageHeader icon={PieChartIcon} title="Holdings" subtitle="Import a MooMoo positions export to get started" />
         <Card className="p-8 text-center text-muted">
           No positions yet. <Button onClick={() => setImporting(true)} className="ml-2">Import MooMoo CSV</Button>
         </Card>
@@ -70,22 +70,25 @@ export default function Holdings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Holdings · MooMoo</h1>
-          <p className="text-sm text-muted mt-1">
+      <PageHeader
+        icon={PieChartIcon}
+        title="Holdings · MooMoo"
+        subtitle={
+          <>
             Snapshot {h.snapshot.import_date} · {s.count} holdings · USD/MYR {h.rate}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={pushToNetWorth} title="Push latest total into the MooMoo net-worth account">
-            <ArrowRightCircle size={16} /> Push to Net Worth
-          </Button>
-          <Button onClick={() => setImporting(true)}>
-            <Upload size={16} /> Import CSV
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={pushToNetWorth} title="Push latest total into the MooMoo net-worth account">
+              <ArrowRightCircle size={16} /> Push to Net Worth
+            </Button>
+            <Button onClick={() => setImporting(true)}>
+              <Upload size={16} /> Import CSV
+            </Button>
+          </div>
+        }
+      />
       {pushMsg && <div className="text-xs text-gain">{pushMsg}</div>}
 
       {/* summary cards */}

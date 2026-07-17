@@ -59,13 +59,15 @@ export default function Settings() {
       <Card className="p-5">
         <CardHeader
           title="Appearance"
-          subtitle="Experimental redesign — grouped navigation, refined cards. Safe to flip back anytime."
+          subtitle="Experimental redesigns — grouped navigation, refined cards; v3 adds tonal surfaces and softer controls. Safe to flip back anytime."
         />
         <div className="mt-4 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2 text-sm">
-            <Sparkles size={16} className={ui.version === 'new' ? 'text-accent' : 'text-muted'} />
+            <Sparkles size={16} className={ui.version !== 'classic' ? 'text-accent' : 'text-muted'} />
             <span>
-              {ui.version === 'new' ? (
+              {ui.version === 'v3' ? (
+                <span className="text-accent font-medium">New UI v3 is on</span>
+              ) : ui.version === 'new' ? (
                 <span className="text-accent font-medium">New UI is on</span>
               ) : (
                 'Classic UI'
@@ -78,6 +80,7 @@ export default function Settings() {
             options={[
               { label: 'Classic', value: 'classic' },
               { label: 'New UI', value: 'new' },
+              { label: 'New UI v3', value: 'v3' },
             ]}
           />
         </div>

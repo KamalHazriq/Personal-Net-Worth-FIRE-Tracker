@@ -117,25 +117,30 @@ app.post('/api/auth/logout', (req, res) => {
 
 // ---- Settings ----
 app.get('/api/settings', (_req, res) => res.json(publicSettings()));
+const NUMERIC_SETTINGS = new Set([
+  'usd_myr_rate',
+  'current_age',
+  'target_retire_age',
+  'epf_unlock_age',
+  'fire_target_monthly_income',
+  'swr',
+  'nisab',
+]);
+
 app.put('/api/settings', (req, res) => {
-  const allowed = [
-    'usd_myr_rate',
-    'current_age',
-    'target_retire_age',
-    'epf_unlock_age',
-    'fire_target_monthly_income',
-    'swr',
-    'assistant_model',
-    'web_search_enabled',
-    'nisab',
-  ];
+  const allowed = [...NUMERIC_SETTINGS, 'assistant_model', 'web_search_enabled'];
   const sets: string[] = [];
   const vals: any[] = [];
   for (const k of allowed) {
-    if (k in req.body) {
-      sets.push(`${k}=?`);
-      vals.push(req.body[k]);
+    if (!(k in req.body)) continue;
+    let v = req.body[k];
+    if (NUMERIC_SETTINGS.has(k)) {
+      v = Number(v);
+      if (!Number.isFinite(v)) return res.status(400).json({ error: `${k} must be a number` });
+      if (k === 'swr' && v <= 0) return res.status(400).json({ error: 'swr must be greater than 0' });
     }
+    sets.push(`${k}=?`);
+    vals.push(v);
   }
   if (sets.length) db.prepare(`UPDATE settings SET ${sets.join(',')} WHERE id=1`).run(...vals);
   res.json(publicSettings());
@@ -175,9 +180,13 @@ app.get('/api/accounts', (_req, res) => {
   res.json(db.prepare('SELECT * FROM accounts ORDER BY category, sort_order').all());
 });
 
+const ACCOUNT_CATEGORIES = ['Bank', 'Income', 'Liability', 'Investment'];
+
 app.post('/api/accounts', (req, res) => {
   const { name, category, subtype = null, is_epf = 0, is_liquid = 1, currency = 'MYR' } = req.body;
   if (!name || !category) return res.status(400).json({ error: 'name and category required' });
+  if (!ACCOUNT_CATEGORIES.includes(category))
+    return res.status(400).json({ error: `category must be one of ${ACCOUNT_CATEGORIES.join(', ')}` });
   const order =
     (db.prepare('SELECT MAX(sort_order) m FROM accounts WHERE category=?').get(category) as any)?.m ??
     0;
@@ -196,6 +205,8 @@ app.post('/api/accounts', (req, res) => {
 
 app.patch('/api/accounts/:id', (req, res) => {
   const id = Number(req.params.id);
+  if ('category' in req.body && !ACCOUNT_CATEGORIES.includes(req.body.category))
+    return res.status(400).json({ error: `category must be one of ${ACCOUNT_CATEGORIES.join(', ')}` });
   const fields = ['name', 'category', 'subtype', 'is_epf', 'is_liquid', 'currency', 'sort_order'];
   const sets: string[] = [];
   const vals: any[] = [];
@@ -215,7 +226,8 @@ app.patch('/api/accounts/:id', (req, res) => {
 });
 
 app.delete('/api/accounts/:id', (req, res) => {
-  db.prepare('DELETE FROM accounts WHERE id=?').run(Number(req.params.id));
+  const info = db.prepare('DELETE FROM accounts WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 });
 
@@ -256,7 +268,8 @@ app.patch('/api/recurring/:id', (req, res) => {
 });
 
 app.delete('/api/recurring/:id', (req, res) => {
-  db.prepare('DELETE FROM recurring_transactions WHERE id=?').run(Number(req.params.id));
+  const info = db.prepare('DELETE FROM recurring_transactions WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 });
 
@@ -323,7 +336,10 @@ app.patch('/api/positions/:id', (req, res) => {
     quantity != null && current_price != null && avg_cost != null
       ? (current_price - avg_cost) * quantity
       : pos.unrealized_pl;
-  const pct_unrealized_pl = avg_cost ? ((current_price - avg_cost) / avg_cost) * 100 : pos.pct_unrealized_pl;
+  const pct_unrealized_pl =
+    avg_cost != null && avg_cost !== 0 && current_price != null
+      ? ((current_price - avg_cost) / avg_cost) * 100
+      : pos.pct_unrealized_pl;
   db.prepare(
     `UPDATE positions SET quantity=?, avg_cost=?, current_price=?, market_value=?, unrealized_pl=?, pct_unrealized_pl=? WHERE id=?`,
   ).run(quantity, avg_cost, current_price, market_value, unrealized_pl, pct_unrealized_pl, id);
@@ -419,7 +435,8 @@ app.post('/api/scenarios', (req, res) => {
   res.json(db.prepare('SELECT * FROM scenarios WHERE id=?').get(info.lastInsertRowid));
 });
 app.delete('/api/scenarios/:id', (req, res) => {
-  db.prepare('DELETE FROM scenarios WHERE id=?').run(Number(req.params.id));
+  const info = db.prepare('DELETE FROM scenarios WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 });
 
@@ -442,7 +459,8 @@ app.patch('/api/playbook/:id', (req, res) => {
   res.json(db.prepare('SELECT * FROM playbook_rules WHERE id=?').get(cur.id));
 });
 app.delete('/api/playbook/:id', (req, res) => {
-  db.prepare('DELETE FROM playbook_rules WHERE id=?').run(Number(req.params.id));
+  const info = db.prepare('DELETE FROM playbook_rules WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 });
 
@@ -485,7 +503,8 @@ app.patch('/api/goals/:id', (req, res) => {
   res.json(db.prepare('SELECT * FROM goals WHERE id=?').get(cur.id));
 });
 app.delete('/api/goals/:id', (req, res) => {
-  db.prepare('DELETE FROM goals WHERE id=?').run(Number(req.params.id));
+  const info = db.prepare('DELETE FROM goals WHERE id=?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 });
 

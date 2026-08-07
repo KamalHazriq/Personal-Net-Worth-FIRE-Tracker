@@ -52,10 +52,12 @@ Add your own (everything stays local on your machine):
 | **Investments** | Per-platform P/L (Capital / Profit-Loss / Balance / P/L%), aggregate P/L%, P/L%-per-platform chart, and a per-coin crypto breakdown. |
 | **Holdings** | Import your MooMoo positions CSV (drag-drop or paste, appended by date), editable positions table with MYR conversion, ETF/Individual + sector tagging that persists, allocation donut (by holding / class / sector), ETF-vs-Individual over time, and a "push latest total into Net Worth" button. |
 | **FIRE** | Compounding projection of total vs **accessible (non-EPF)** money, FIRE number, the age you can retire, RM5k/10k/15k income cases, return sensitivity (10/12/15%), a reverse "required contribution" solver, and saveable scenario comparison. |
-| **Goals** | Track goals (net-worth target, emergency fund, holding %, contribution, retire-by-age) with progress bars computed locally; single-stock **concentration alerts**; and a dated **monthly-review journal** (computed summary, optionally interpreted by the assistant). |
+| **Goals** | Track goals (net-worth target, emergency fund, holding %, contribution, retire-by-age) with progress bars computed locally; single-stock **concentration alerts**; a **Zakat calculator** (nisab-aware, computed from your real bank/investment/liability balances); and a dated **monthly-review journal** (computed summary, optionally interpreted by the assistant). |
+| **Recurring** | Track recurring bills, subscriptions and income (monthly/yearly), with a running total of monthly outflow. |
 | **Playbook** | Your own rules (e.g. the "When markets drop" checklist) as editable cards. |
+| **Studio** | Generate 1080×1080 social cards (number/donut/trend styles) from your live numbers — theme presets, RM-vs-%-only toggle, PNG download or clipboard copy. Your handle & theme stay in `localStorage` only, never in the repo. |
 | **Assistant** | Optional AI companion that reasons over your live numbers (see below). |
-| **Settings** | USD/MYR rate, ages, SWR, target income, assistant model/web-search, and **export** to .xlsx / .csv / .json. |
+| **Settings** | USD/MYR rate, ages, SWR, target income, assistant model/web-search, appearance (Classic/New UI/New UI v3), and **export** to .xlsx / .csv / .json. |
 
 ---
 

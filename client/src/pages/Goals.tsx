@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Target, Plus, Trash2, AlertTriangle, CalendarCheck, Loader2, Coins } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
-import { rm } from '../lib/format';
+import { rm, safeJson } from '../lib/format';
 import { Card, CardHeader, Button, Modal, Field, TextInput, SelectInput, PageSkeleton, PageHeader, cn, Badge } from '../components/ui';
 import { useToast } from '../components/Toast';
 
@@ -138,7 +138,7 @@ export default function Goals() {
 }
 
 function progressFor(goal: any, data: any) {
-  const t = typeof goal.target_json === 'string' ? JSON.parse(goal.target_json) : goal.target_json;
+  const t = safeJson(goal.target_json);
   switch (t.type) {
     case 'net_worth':
       return { current: data.dash.netWorth, target: t.target, fmt: rm, sub: 'net worth' };

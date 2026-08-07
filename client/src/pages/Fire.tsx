@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { Flame, Lock, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
-import { rm, pct } from '../lib/format';
+import { rm, pct, safeJson } from '../lib/format';
 import { Card, CardHeader, Stat, Badge, Button, cn, PageSkeleton, PageHeader, Modal, Field, TextInput } from '../components/ui';
 import {
   project,
@@ -387,7 +387,7 @@ function ScenarioCompare({ scenarios, compareIds, setCompareIds, base, onDelete 
 
   const selected = scenarios.filter((s: any) => compareIds.includes(s.id)).slice(0, 3);
   const computed = selected.map((s: any) => {
-    const params = JSON.parse(s.params_json);
+    const params = safeJson(s.params_json);
     const inp: FireInputs = { ...params, cashReturn: 0 };
     const res = project(inp);
     return { id: s.id, name: s.name, params, res };

@@ -27,3 +27,14 @@ export function monthLabel(date: string): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${months[Number(m) - 1]} ${y.slice(2)}`;
 }
+
+/** Parse a JSON column that may already be an object, or malformed. Falls back to {}. */
+export function safeJson(value: unknown): any {
+  if (value == null) return {};
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}

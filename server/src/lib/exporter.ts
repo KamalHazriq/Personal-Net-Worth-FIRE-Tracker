@@ -36,9 +36,15 @@ export function exportSnapshotsCsv(db: Database.Database): string {
     .all() as any[];
   const head = 'Account,Category,Subtype,Date,Value';
   const body = rows
-    .map((r) => `"${r.name}","${r.category}","${r.subtype || ''}",${r.date},${r.value}`)
+    .map((r) => `${csvCell(r.name)},${csvCell(r.category)},${csvCell(r.subtype || '')},${r.date},${r.value}`)
     .join('\n');
   return head + '\n' + body + '\n';
+}
+
+/** Quote + escape a CSV field, and neutralize leading formula-trigger characters for spreadsheet apps. */
+function csvCell(v: string): string {
+  const s = /^[=+\-@]/.test(v) ? `'${v}` : v;
+  return `"${s.replace(/"/g, '""')}"`;
 }
 
 /** Rebuild an .xlsx workbook (one sheet per year grid + a Holdings sheet). */

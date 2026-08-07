@@ -246,7 +246,7 @@ export function driftAlerts(db: Database.Database, cap = DEFAULT_SINGLE_STOCK_CA
   if (h.summary) {
     // single-stock caps
     for (const p of h.positions) {
-      if (p.asset_class !== 'ETF' && p.pct_portfolio > cap) {
+      if (p.asset_class !== 'ETF' && p.pct_portfolio != null && p.pct_portfolio > cap) {
         alerts.push({
           level: 'warn',
           symbol: p.symbol,

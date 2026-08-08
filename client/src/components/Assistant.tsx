@@ -43,7 +43,9 @@ export function AssistantChat({ compact = false }: { compact?: boolean }) {
     setInput('');
     setBusy(true);
     try {
-      const r = await api('/assistant/chat', { method: 'POST', body: JSON.stringify({ question: q, useWebSearch: web }) });
+      // silent: logging a Q&A doesn't change financial data, and this panel is
+      // mounted on every page — broadcasting would refetch whatever is behind it.
+      const r = await api('/assistant/chat', { method: 'POST', silent: true, body: JSON.stringify({ question: q, useWebSearch: web }) });
       if (r.ok) {
         setMsgs((m) => [...m, { role: 'assistant', text: r.text, usedWebSearch: r.usedWebSearch, buySell: BUYSELL_RE.test(r.text) }]);
       } else {

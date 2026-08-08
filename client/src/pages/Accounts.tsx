@@ -33,7 +33,7 @@ const numFmt = (v: number | null | undefined) =>
 export default function Accounts() {
   const [grid, setGrid] = useState<Grid | null>(null);
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [editAcct, setEditAcct] = useState<Acct | null>(null);
+  const [editAcct, setEditAcct] = useState<{ acct: Acct; category: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [saved, setSaved] = useState(false);
   const toast = useToast();
@@ -43,7 +43,21 @@ export default function Accounts() {
     load(year);
   }, [year]);
 
+  const savedT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(savedT.current), []);
+
   // --- live cell update (optimistic) ---
+  //
+  // This page deliberately does NOT use `useDataRefresh` like the read-only pages
+  // do. Two reasons, both load-bearing:
+  //   1. Cells are uncontrolled inputs keyed on their formatted value, so a
+  //      broadcast-driven refetch would remount them and discard whatever the
+  //      user is currently typing.
+  //   2. `gridForYear` joins through snapshots, so an account with no values yet
+  //      isn't returned — a blanket refetch would make a just-added account
+  //      disappear until a number is entered (hence the local inject below).
+  // Instead: apply the change locally straight away, then reconcile with the
+  // server only if the write fails.
   const setCell = (acctId: number, date: string, value: number | null) => {
     setGrid((g) => {
       if (!g) return g;
@@ -62,8 +76,8 @@ export default function Accounts() {
     api('/snapshots', { method: 'PUT', body: JSON.stringify({ account_id: acctId, date, value }) })
       .then(() => {
         setSaved(true);
-        clearTimeout((window as any).__savedT);
-        (window as any).__savedT = setTimeout(() => setSaved(false), 1200);
+        clearTimeout(savedT.current);
+        savedT.current = setTimeout(() => setSaved(false), 1200);
       })
       .catch(() => load(year));
   };
@@ -212,7 +226,7 @@ export default function Accounts() {
                 months={months}
                 subtotals={sums.subtotals[grp.category]}
                 onCell={setCell}
-                onEdit={setEditAcct}
+                onEdit={(a, category) => setEditAcct({ acct: a, category })}
                 onMove={moveCell}
               />
             ))}
@@ -251,12 +265,13 @@ export default function Accounts() {
 
       {editAcct && (
         <AccountEditor
-          acct={editAcct}
+          acct={editAcct.acct}
+          category={editAcct.category}
           onClose={() => setEditAcct(null)}
-          onSaved={() => {
+          onSaved={(msg) => {
             setEditAcct(null);
             load(year);
-            toast('Account updated');
+            toast(msg);
           }}
         />
       )}
@@ -266,7 +281,9 @@ export default function Accounts() {
           onAdded={(a) => {
             setAdding(false);
             toast('Account added');
-            // inject locally so it shows even before any value is entered
+            // Inject locally rather than refetching: `gridForYear` only returns
+            // accounts that have a snapshot in this year, so a refetch here would
+            // drop the new account until a value is typed into it.
             setGrid((g) =>
               g
                 ? {
@@ -299,7 +316,7 @@ function GroupRows({
   months: { date: string; opening: boolean }[];
   subtotals: Record<string, number>;
   onCell: (id: number, date: string, v: number | null) => void;
-  onEdit: (a: Acct) => void;
+  onEdit: (a: Acct, category: string) => void;
   onMove: (id: number, col: number, dir: 'up' | 'down' | 'left' | 'right') => void;
 }) {
   return (
@@ -325,7 +342,7 @@ function GroupRows({
                 {a.subtype}
               </span>
               <button
-                onClick={() => onEdit(a)}
+                onClick={() => onEdit(a, grp.category)}
                 className="opacity-60 md:opacity-0 md:group-hover:opacity-100 text-muted hover:text-accent ml-auto p-1 -m-1 rounded"
                 aria-label={`Edit ${a.name}`}
                 title="Edit account"
@@ -460,7 +477,19 @@ function EditableCell({
 }
 
 // ---- account editor / add ----
-function AccountEditor({ acct, onClose, onSaved }: { acct: Acct; onClose: () => void; onSaved: () => void }) {
+function AccountEditor({
+  acct,
+  category,
+  onClose,
+  onSaved,
+}: {
+  acct: Acct;
+  /** The group the account is rendered under — the server's own grouping, so the
+   *  subtype list is always the right one (don't re-derive it from the subtype). */
+  category: string;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}) {
   const [name, setName] = useState(acct.name);
   const [subtype, setSubtype] = useState(acct.subtype);
   const [isEpf, setIsEpf] = useState(!!acct.is_epf);
@@ -472,7 +501,7 @@ function AccountEditor({ acct, onClose, onSaved }: { acct: Acct; onClose: () => 
       method: 'PATCH',
       body: JSON.stringify({ name, subtype, is_epf: isEpf, is_liquid: isLiquid }),
     });
-    onSaved();
+    onSaved('Account updated');
   };
   const del = async () => {
     const ok = await confirmDialog({
@@ -483,7 +512,7 @@ function AccountEditor({ acct, onClose, onSaved }: { acct: Acct; onClose: () => 
     });
     if (!ok) return;
     await api(`/accounts/${acct.id}`, { method: 'DELETE' });
-    onSaved();
+    onSaved('Account deleted');
   };
 
   return (
@@ -493,7 +522,7 @@ function AccountEditor({ acct, onClose, onSaved }: { acct: Acct; onClose: () => 
       </Field>
       <Field label="Subtype">
         <SelectInput value={subtype} onChange={(e) => setSubtype(e.target.value)}>
-          {(SUBTYPES[catOf(acct)] || ['Other']).map((s) => (
+          {(SUBTYPES[category] || ['Other']).map((s) => (
             <option key={s}>{s}</option>
           ))}
         </SelectInput>
@@ -519,12 +548,6 @@ function AccountEditor({ acct, onClose, onSaved }: { acct: Acct; onClose: () => 
       </div>
     </Modal>
   );
-}
-
-function catOf(_a: Acct) {
-  // subtype list is keyed by category; we infer from subtype membership
-  for (const [cat, subs] of Object.entries(SUBTYPES)) if (subs.includes(_a.subtype)) return cat;
-  return 'Investment';
 }
 
 function AddAccount({ onClose, onAdded }: { onClose: () => void; onAdded: (a: any) => void }) {

@@ -187,14 +187,14 @@ function SecurityCard({ passcodeSet, onChanged }: { passcodeSet: boolean; onChan
   };
 
   const setup = wrap(async () => {
-    const r = await api('/auth/setup', { method: 'POST', body: JSON.stringify({ passcode: pass }) });
+    const r = await api('/auth/setup', { method: 'POST', silent: true, body: JSON.stringify({ passcode: pass }) });
     setToken(r.token);
     setPass('');
     toast('Passcode set');
     onChanged();
   });
   const change = wrap(async () => {
-    const r = await api('/auth/change', { method: 'POST', body: JSON.stringify({ current, next }) });
+    const r = await api('/auth/change', { method: 'POST', silent: true, body: JSON.stringify({ current, next }) });
     setToken(r.token);
     setCurrent('');
     setNext('');
@@ -202,7 +202,7 @@ function SecurityCard({ passcodeSet, onChanged }: { passcodeSet: boolean; onChan
     onChanged();
   });
   const remove = wrap(async () => {
-    await api('/auth/remove', { method: 'POST', body: JSON.stringify({ current }) });
+    await api('/auth/remove', { method: 'POST', silent: true, body: JSON.stringify({ current }) });
     clearToken();
     setCurrent('');
     toast('Passcode removed');

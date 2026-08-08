@@ -1,14 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export const getToken = () => localStorage.getItem('authToken') || '';
 export const setToken = (t: string) => localStorage.setItem('authToken', t);
 export const clearToken = () => localStorage.removeItem('authToken');
 
-export async function api<T = any>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * `silent: true` marks a mutation that doesn't change financial data (assistant
+ * chat, auth) so it won't broadcast `data:changed` and make every listening page
+ * refetch for nothing.
+ */
+export type ApiInit = RequestInit & { silent?: boolean };
+
+export async function api<T = any>(path: string, init?: ApiInit): Promise<T> {
+  const { silent, ...req } = init ?? {};
   const token = getToken();
   const res = await fetch(`/api${path}`, {
     headers: { 'Content-Type': 'application/json', ...(token ? { 'x-auth-token': token } : {}) },
-    ...init,
+    ...req,
   });
   if (res.status === 401 && !path.startsWith('/auth/')) {
     // session expired or app locked — prompt for the passcode again
@@ -26,21 +34,30 @@ export async function api<T = any>(path: string, init?: RequestInit): Promise<T>
     throw new Error(msg);
   }
   const data = await res.json();
-  const method = (init?.method || 'GET').toUpperCase();
-  if (method !== 'GET') window.dispatchEvent(new CustomEvent('data:changed'));
+  const method = (req.method || 'GET').toUpperCase();
+  if (method !== 'GET' && !silent) window.dispatchEvent(new CustomEvent('data:changed'));
   return data;
 }
 
-/** Re-run `cb` when data is mutated anywhere or the window regains focus. */
+/**
+ * Re-run `cb` when data is mutated anywhere or the window regains focus.
+ *
+ * `cb` is held in a ref so the listeners are attached once instead of being torn
+ * down and re-added on every render, while still always calling the freshest
+ * closure (so callers can safely close over props/state without a stale read).
+ */
 export function useDataRefresh(cb: () => void) {
+  const latest = useRef(cb);
   useEffect(() => {
-    const onChange = () => cb();
-    const onFocus = () => cb();
-    window.addEventListener('data:changed', onChange);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      window.removeEventListener('data:changed', onChange);
-      window.removeEventListener('focus', onFocus);
-    };
+    latest.current = cb;
   });
+  useEffect(() => {
+    const run = () => latest.current();
+    window.addEventListener('data:changed', run);
+    window.addEventListener('focus', run);
+    return () => {
+      window.removeEventListener('data:changed', run);
+      window.removeEventListener('focus', run);
+    };
+  }, []);
 }

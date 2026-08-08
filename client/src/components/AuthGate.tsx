@@ -48,7 +48,8 @@ function Unlock({ onUnlocked }: { onUnlocked: () => void }) {
     setErr('');
     setBusy(true);
     try {
-      const r = await api('/auth/login', { method: 'POST', body: JSON.stringify({ passcode: pass }) });
+      // silent: unlocking mounts the app fresh, so children fetch on mount anyway.
+      const r = await api('/auth/login', { method: 'POST', silent: true, body: JSON.stringify({ passcode: pass }) });
       setToken(r.token);
       setPass('');
       onUnlocked();

@@ -97,6 +97,28 @@ export interface ChatResult {
   usedWebSearch?: boolean;
 }
 
+/**
+ * The `_20260209` web-search tool adds dynamic filtering (results are filtered
+ * before they reach the context window) and is available on Opus 4.6+ and
+ * Sonnet 4.6+. Haiku 4.5 only supports the basic variant, so pick per model
+ * rather than hardcoding one — sending the new type to Haiku is rejected.
+ */
+const WEB_SEARCH_DYNAMIC_FILTERING = new Set([
+  'claude-opus-5',
+  'claude-sonnet-5',
+  'claude-opus-4-8',
+  'claude-opus-4-7',
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+]);
+
+export function webSearchTool(model: string) {
+  const type = WEB_SEARCH_DYNAMIC_FILTERING.has(model)
+    ? 'web_search_20260209'
+    : 'web_search_20250305';
+  return { type, name: 'web_search', max_uses: 5 };
+}
+
 /** Call the Anthropic Messages API (non-streaming). Web search runs server-side. */
 export async function callAnthropic(opts: {
   model: string;
@@ -107,9 +129,8 @@ export async function callAnthropic(opts: {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return { ok: false, error: 'no-key' };
 
-  const tools = opts.useWebSearch
-    ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]
-    : undefined;
+  const model = opts.model || 'claude-opus-5';
+  const tools = opts.useWebSearch ? [webSearchTool(model)] : undefined;
 
   const userContent = `Here is my current financial data (computed by the app — trust these numbers):\n\n\`\`\`json\n${JSON.stringify(
     opts.context,
@@ -126,8 +147,12 @@ export async function callAnthropic(opts: {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: opts.model || 'claude-opus-4-8',
-        max_tokens: 2000,
+        model,
+        // max_tokens caps thinking AND the reply together, and the Claude 5
+        // models think by default — 2000 was sized for a reply alone and
+        // truncates once thinking is counted. The system prompt is what keeps
+        // answers short; this is just headroom.
+        max_tokens: 16000,
         system: SYSTEM_PROMPT,
         tools,
         messages: [{ role: 'user', content: userContent }],

@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS settings (
   epf_unlock_age INTEGER NOT NULL DEFAULT 55,
   fire_target_monthly_income REAL NOT NULL DEFAULT 10000,
   swr REAL NOT NULL DEFAULT 0.04,
-  assistant_model TEXT NOT NULL DEFAULT 'claude-opus-4-8',
+  assistant_model TEXT NOT NULL DEFAULT 'claude-opus-5',
   web_search_enabled INTEGER NOT NULL DEFAULT 1
 );
 
@@ -185,6 +185,14 @@ const MIGRATIONS = [
   )`,
   'ALTER TABLE contributions ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE settings ADD COLUMN nisab REAL NOT NULL DEFAULT 30000',
+  // Point existing installs at the current model generation. Each maps to its
+  // own tier's successor so a deliberate Opus/Sonnet choice is preserved; the
+  // old IDs still work at the API but are no longer offered in Settings, which
+  // would otherwise leave the picker showing nothing selected.
+  // (claude-haiku-4-5 is still current and is intentionally left alone.)
+  `UPDATE settings SET assistant_model='claude-opus-5' WHERE assistant_model='claude-opus-4-8'`,
+  `UPDATE settings SET assistant_model='claude-sonnet-5' WHERE assistant_model='claude-sonnet-4-6'`,
+  `UPDATE settings SET assistant_model='claude-haiku-4-5' WHERE assistant_model='claude-haiku-4-5-20251001'`,
 ];
 
 export function initSchema(db: Database.Database) {

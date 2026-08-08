@@ -132,9 +132,9 @@ export default function Settings() {
           <div className="grid grid-cols-2 gap-4">
             <Field label="Model">
               <SelectInput value={s.assistant_model} onChange={(e) => update({ assistant_model: e.target.value })}>
-                <option value="claude-opus-4-8">claude-opus-4-8</option>
-                <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-                <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+                <option value="claude-opus-5">claude-opus-5 — most capable</option>
+                <option value="claude-sonnet-5">claude-sonnet-5 — balanced</option>
+                <option value="claude-haiku-4-5">claude-haiku-4-5 — fastest</option>
               </SelectInput>
             </Field>
             <Field label="Web search (for current prices / Shariah lookups)">

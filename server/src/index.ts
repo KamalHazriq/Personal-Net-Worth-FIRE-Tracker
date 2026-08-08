@@ -137,7 +137,11 @@ app.put('/api/settings', (req, res) => {
     if (NUMERIC_SETTINGS.has(k)) {
       v = Number(v);
       if (!Number.isFinite(v)) return res.status(400).json({ error: `${k} must be a number` });
-      if (k === 'swr' && v <= 0) return res.status(400).json({ error: 'swr must be greater than 0' });
+      // swr is stored as a FRACTION (0.05 = 5%). Range-checking it stops a
+      // percent value being written by mistake, which silently divides the
+      // FIRE number by 100.
+      if (k === 'swr' && (v <= 0 || v > 1))
+        return res.status(400).json({ error: 'swr must be a fraction between 0 and 1 (e.g. 0.05 for 5%)' });
     }
     sets.push(`${k}=?`);
     vals.push(v);

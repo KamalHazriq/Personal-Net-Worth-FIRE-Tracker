@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -14,6 +14,7 @@ import { Flame, Lock, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { rm, pct, safeJson } from '../lib/format';
 import { Card, CardHeader, Stat, Badge, Button, cn, PageSkeleton, PageHeader, Modal, Field, TextInput } from '../components/ui';
+import { useToast } from '../components/Toast';
 import {
   project,
   sensitivity,
@@ -25,6 +26,14 @@ import {
 
 const SCEN_COLORS = ['#4f8cff', '#2ec27e', '#f5b301', '#a06bff'];
 
+/** Local param name -> settings column. Params absent here stay client-only. */
+const SETTING_KEYS: Record<string, string> = {
+  currentAge: 'current_age',
+  targetRetireAge: 'target_retire_age',
+  swr: 'swr',
+  targetIncome: 'fire_target_monthly_income',
+};
+
 export default function Fire() {
   const [seed, setSeed] = useState<any>(null);
   const [p, setP] = useState({ currentAge: 24, targetRetireAge: 45, epfUnlockAge: 55, swr: 0.04, targetIncome: 10000, horizonAge: 60 });
@@ -32,6 +41,7 @@ export default function Fire() {
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [namingScenario, setNamingScenario] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     api('/fire/seed').then((d) => {
@@ -67,10 +77,46 @@ export default function Fire() {
   );
   const result = useMemo(() => (inputs ? project(inputs) : null), [inputs]);
 
+  // --- settings persistence ------------------------------------------------
+  // The sliders emit onChange on every step and the number fields on every
+  // keystroke, so writes are coalesced and only sent once the user settles.
+  // Local state still updates immediately, so the projection stays live.
+  const pendingSettings = useRef<Record<string, number>>({});
+  const settingsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const flushSettings = useCallback(() => {
+    const patch = pendingSettings.current;
+    pendingSettings.current = {};
+    if (!Object.keys(patch).length) return;
+    api('/settings', { method: 'PUT', body: JSON.stringify(patch) }).catch((e: any) =>
+      toast(`Couldn't save FIRE settings: ${e.message}`, 'error'),
+    );
+  }, [toast]);
+
+  // Flush on unmount so a change made just before navigating away isn't lost.
+  const flushRef = useRef(flushSettings);
+  useEffect(() => {
+    flushRef.current = flushSettings;
+  });
+  useEffect(
+    () => () => {
+      clearTimeout(settingsTimer.current);
+      flushRef.current();
+    },
+    [],
+  );
+
   const setParam = (k: string, v: number) => {
     setP((prev) => ({ ...prev, [k]: v }));
-    const map: any = { currentAge: 'current_age', targetRetireAge: 'target_retire_age', swr: 'swr', targetIncome: 'fire_target_monthly_income' };
-    if (map[k]) api('/settings', { method: 'PUT', body: JSON.stringify({ [map[k]]: v }) }).catch(() => {});
+    const column = SETTING_KEYS[k];
+    if (!column || !Number.isFinite(v)) return;
+    // The API rejects a non-positive SWR (it's the divisor for the FIRE
+    // number). Keep what was typed on screen, but don't fire a write the
+    // server will refuse — `swrInvalid` says so inline instead.
+    if (k === 'swr' && !(v > 0)) return;
+    pendingSettings.current[column] = v;
+    clearTimeout(settingsTimer.current);
+    settingsTimer.current = setTimeout(() => flushRef.current(), 400);
   };
 
   const setAcct = (id: number, patch: Partial<FireAccount>) => {
@@ -79,12 +125,16 @@ export default function Fire() {
     api(`/contributions/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ monthly_amount: a.monthly, annual_return_rate: a.annualReturn, annual_contribution_growth_rate: a.growth }),
-    }).catch(() => {});
+    }).catch((e: any) => toast(`Couldn't save ${a.name}: ${e.message}`, 'error'));
   };
 
   const toggleExcluded = async (id: number) => {
     setAccts((prev) => prev.map((a) => (a.id === id ? { ...a, excluded: !a.excluded } : a)));
-    await api(`/contributions/${id}/toggle`, { method: 'PATCH' });
+    try {
+      await api(`/contributions/${id}/toggle`, { method: 'PATCH' });
+    } catch (e: any) {
+      toast(`Couldn't update account: ${e.message}`, 'error');
+    }
   };
 
   const toggleAllExcluded = async () => {
@@ -92,8 +142,12 @@ export default function Fire() {
     const newExcluded = anyIncluded; // if any included, turn all off. else turn all on.
     const toToggle = accts.filter(a => !!a.excluded !== newExcluded);
     setAccts(prev => prev.map(a => ({ ...a, excluded: newExcluded })));
-    for (const a of toToggle) {
-      await api(`/contributions/${a.id}/toggle`, { method: 'PATCH' });
+    try {
+      for (const a of toToggle) {
+        await api(`/contributions/${a.id}/toggle`, { method: 'PATCH' });
+      }
+    } catch (e: any) {
+      toast(`Couldn't update accounts: ${e.message}`, 'error');
     }
   };
 
@@ -101,6 +155,9 @@ export default function Fire() {
 
   const fn = result.fireNumber;
   const reached = result.fireAgeAccessible;
+  // A non-positive SWR makes the FIRE number infinite and is rejected by the
+  // API, so it's shown as unset rather than as "RM ∞".
+  const swrInvalid = !(p.swr > 0);
   const accessibleStart = seed.cashStart + accts.filter((a) => !a.is_epf && !a.excluded).reduce((s, a) => s + a.startBalance, 0);
 
   const saveScenario = async (name: string) => {
@@ -124,7 +181,14 @@ export default function Fire() {
           <SliderInput label="Current age" value={p.currentAge} min={18} max={50} onChange={(v) => setParam('currentAge', v)} />
           <SliderInput label="Target retire age" value={p.targetRetireAge} min={p.currentAge + 1} max={60} onChange={(v) => setParam('targetRetireAge', v)} />
           <NumberField label="Target income / mo" value={p.targetIncome} step={500} onChange={(v) => setParam('targetIncome', v)} prefix="RM" />
-          <NumberField label="SWR %" value={p.swr * 100} step={0.5} onChange={(v) => setParam('swr', v / 100)} suffix="%" />
+          <NumberField
+            label="SWR %"
+            value={p.swr * 100}
+            step={0.5}
+            onChange={(v) => setParam('swr', v / 100)}
+            suffix="%"
+            hint={swrInvalid ? 'Must be above 0 — not saved' : undefined}
+          />
           <SliderInput label="Project to age" value={p.horizonAge} min={p.targetRetireAge} max={75} onChange={(v) => setP((x) => ({ ...x, horizonAge: v }))} />
         </div>
         <div className="flex gap-1.5 mt-3">
@@ -143,7 +207,11 @@ export default function Fire() {
 
       {/* Readiness cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="FIRE number" value={rm(fn)} sub={`${rm(p.targetIncome)}/mo ÷ ${(p.swr * 100).toFixed(1)}% SWR`} />
+        <Stat
+          label="FIRE number"
+          value={swrInvalid ? '—' : rm(fn)}
+          sub={swrInvalid ? 'set an SWR above 0% to calculate' : `${rm(p.targetIncome)}/mo ÷ ${(p.swr * 100).toFixed(1)}% SWR`}
+        />
         <Stat
           label="Can retire (accessible) at"
           value={reached ? `age ${reached}` : 'beyond ' + p.horizonAge}
@@ -479,21 +547,23 @@ function SliderInput({ label, value, min, max, onChange }: { label: string; valu
   );
 }
 
-function NumberField({ label, value, step, onChange, prefix, suffix }: { label: string; value: number; step: number; onChange: (v: number) => void; prefix?: string; suffix?: string }) {
+function NumberField({ label, value, step, onChange, prefix, suffix, hint }: { label: string; value: number; step: number; onChange: (v: number) => void; prefix?: string; suffix?: string; hint?: string }) {
   return (
     <div>
       <div className="text-xs text-muted mb-1">{label}</div>
-      <div className="flex items-center rounded-lg border border-border bg-surface-2 px-2">
+      <div className={cn('flex items-center rounded-lg border bg-surface-2 px-2', hint ? 'border-loss' : 'border-border')}>
         {prefix && <span className="text-xs text-muted">{prefix}</span>}
         <input
           type="number"
           step={step}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
+          aria-invalid={hint ? true : undefined}
           className="w-full bg-transparent px-1 py-1.5 text-sm outline-none tabular-nums"
         />
         {suffix && <span className="text-xs text-muted">{suffix}</span>}
       </div>
+      {hint && <div className="text-[10px] text-loss mt-1">{hint}</div>}
     </div>
   );
 }

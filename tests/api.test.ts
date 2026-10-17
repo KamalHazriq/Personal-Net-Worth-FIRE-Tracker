@@ -353,6 +353,53 @@ test('GET /api/zakat nets liabilities and EPF out of zakatable wealth', async ()
   assert.equal(above.body.zakat_due, 95); // 3800 * 2.5%
 });
 
+// ------------------------------------------------------- push to net worth --
+
+/** A positions snapshot with one holding worth `mv` USD, imported on `date`. */
+function addPositions(date: string, mv: number) {
+  const snapId = db.prepare('INSERT INTO positions_snapshots (import_date) VALUES (?)').run(date).lastInsertRowid;
+  db.prepare(
+    'INSERT INTO positions (snapshot_id, symbol, quantity, avg_cost, current_price, market_value, currency) VALUES (?,?,?,?,?,?,?)',
+  ).run(snapId, 'TEST', 1, mv, mv, mv, 'USD');
+  return snapId;
+}
+
+test('push-to-net-worth previews without writing, and reports what it would replace', async () => {
+  const moomoo = addAccount('MooMoo', 'Investment', 'Stocks');
+  db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)').run(moomoo, '2026-09-30', 27900);
+  addPositions('2026-07-09', 1000);
+  await api('/api/settings', { method: 'PUT', body: { usd_myr_rate: 4 } });
+
+  const p = await api('/api/holdings/push-to-networth', { method: 'POST', body: { preview: true } });
+  assert.equal(p.status, 200);
+  assert.equal(p.body.preview, true);
+  assert.equal(p.body.date, '2026-09-30');
+  assert.equal(p.body.value, 4000);            // 1000 USD at 4.00
+  assert.equal(p.body.previousValue, 27900);   // what it would overwrite
+  assert.equal(p.body.difference, -23900);
+  assert.equal(p.body.positionsDate, '2026-07-09');
+  assert.equal(p.body.staleMonths, 2);
+
+  // A preview must not touch the database.
+  const still = db.prepare('SELECT value v FROM snapshots WHERE account_id=? AND date=?').get(moomoo, '2026-09-30') as any;
+  assert.equal(still.v, 27900);
+});
+
+test('push-to-net-worth writes when not previewing and reports the old value', async () => {
+  const moomoo = addAccount('MooMoo', 'Investment', 'Stocks');
+  db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)').run(moomoo, '2026-09-30', 27900);
+  addPositions('2026-09-28', 1000);
+  await api('/api/settings', { method: 'PUT', body: { usd_myr_rate: 4 } });
+
+  const r = await api('/api/holdings/push-to-networth', { method: 'POST', body: {} });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.preview, undefined);
+  assert.equal(r.body.previousValue, 27900);
+  assert.equal(r.body.staleMonths, 0);
+  const now = db.prepare('SELECT value v FROM snapshots WHERE account_id=? AND date=?').get(moomoo, '2026-09-30') as any;
+  assert.equal(now.v, 4000);
+});
+
 // ----------------------------------------------------------------- review --
 
 test('monthly review measures the invested pool net of borrowing, and says so', async () => {

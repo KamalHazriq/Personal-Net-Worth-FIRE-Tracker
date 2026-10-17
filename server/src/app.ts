@@ -375,24 +375,53 @@ const NUMERIC_SETTINGS = new Set([
 
   // Push the latest MooMoo total (converted to MYR) into a month-end snapshot for
   // the MooMoo investment account.
+  // Copies the latest positions total into the MooMoo account for a month.
+  //
+  // This overwrites a recorded balance, and the positions snapshot can easily be
+  // months older than the month being written — pushing a stale import would
+  // quietly replace a good figure with a worse one. So it reports what it would
+  // replace and how stale the import is, and `preview: true` answers all of that
+  // without writing, which is what the confirm dialog is built on.
   app.post('/api/holdings/push-to-networth', (req, res) => {
     const h = holdingsLatest(db) as any;
     if (!h.snapshot) return res.status(400).json({ error: 'no positions imported' });
     const acc = db
-      .prepare(`SELECT id FROM accounts WHERE name='MooMoo' AND category='Investment'`)
+      .prepare(`SELECT id, name FROM accounts WHERE name='MooMoo' AND category='Investment'`)
       .get() as any;
     if (!acc) return res.status(404).json({ error: 'MooMoo investment account not found' });
-    // target month-end: provided date, else latest tracked snapshot month
-    let date = req.body?.date as string | undefined;
-    if (!date) {
-      date = (db.prepare('SELECT MAX(date) d FROM snapshots').get() as any)?.d;
-    }
-    const valueMyr = Math.round(h.summary.totalMV_myr * 100) / 100;
+
+    const date: string =
+      (req.body?.date as string | undefined) ||
+      ((db.prepare('SELECT MAX(date) d FROM snapshots').get() as any)?.d as string);
+    if (!date) return res.status(400).json({ error: 'no month to write to' });
+
+    const valueMyr = round2(h.summary.totalMV_myr);
+    const existing = db
+      .prepare('SELECT value FROM snapshots WHERE account_id=? AND date=?')
+      .get(acc.id, date) as any;
+    const previousValue = existing ? existing.value : null;
+
+    const positionsDate: string = h.snapshot.import_date;
+    const monthIdx = (d: string) => Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7));
+    const staleMonths = Math.max(0, monthIdx(date) - monthIdx(positionsDate));
+
+    const summary = {
+      date,
+      value: valueMyr,
+      previousValue,
+      difference: previousValue == null ? null : round2(valueMyr - previousValue),
+      positionsDate,
+      staleMonths,
+      accountName: acc.name,
+    };
+
+    if (req.body?.preview) return res.json({ ok: true, preview: true, ...summary });
+
     db.prepare(
       `INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)
        ON CONFLICT(account_id, date) DO UPDATE SET value=excluded.value`,
     ).run(acc.id, date, valueMyr);
-    res.json({ ok: true, date, value: valueMyr });
+    res.json({ ok: true, ...summary });
   });
 
   // ---- FIRE simulation ----

@@ -12,9 +12,11 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
-import { Upload, ArrowRightCircle, TrendingUp, TrendingDown, PieChart as PieChartIcon } from 'lucide-react';
+import { Upload, ArrowRightCircle, TrendingUp, TrendingDown, PieChart as PieChartIcon, Info } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
-import { rm, usd, pct } from '../lib/format';
+import { useConfirm } from '../components/Confirm';
+import { useToast } from '../components/Toast';
+import { rm, usd, pct, monthLabel, signedRm } from '../lib/format';
 import { Card, CardHeader, Stat, Badge, Button, Toggle, Modal, Field, TextInput, cn, PageSkeleton, PageHeader } from '../components/ui';
 
 const COLORS = ['#4f8cff', '#2ec27e', '#f5b301', '#a06bff', '#ff8a5c', '#5bc0eb', '#f6685e', '#19b3a6', '#7aa2ff', '#e879f9'];
@@ -25,10 +27,18 @@ export default function Holdings() {
   const [allocMode, setAllocMode] = useState('holding');
   const [importing, setImporting] = useState(false);
   const [pushMsg, setPushMsg] = useState('');
+  const [acctCmp, setAcctCmp] = useState<any>(null);
+  const confirmDialog = useConfirm();
+  const toast = useToast();
 
   const load = () => {
     api('/holdings').then(setH);
     api('/holdings/series').then(setSeries);
+    // The MooMoo account balance is the live figure; this page shows whatever was
+    // last imported. Fetch it so any gap between them is on screen.
+    api('/holdings/push-to-networth', { method: 'POST', silent: true, body: JSON.stringify({ preview: true }) })
+      .then(setAcctCmp)
+      .catch(() => setAcctCmp(null));
   };
   useEffect(() => {
     load();
@@ -50,10 +60,48 @@ export default function Holdings() {
   if (!h) return <PageSkeleton />;
   const s = h.summary;
 
+  // This overwrites a recorded balance, and the positions import is often older
+  // than the month being written — so ask first, with the actual before/after.
   const pushToNetWorth = async () => {
-    const r = await api('/holdings/push-to-networth', { method: 'POST', body: JSON.stringify({}) });
-    setPushMsg(`Pushed ${rm(r.value)} into MooMoo for ${r.date}.`);
-    setTimeout(() => setPushMsg(''), 4000);
+    let p: any;
+    try {
+      p = await api('/holdings/push-to-networth', { method: 'POST', body: JSON.stringify({ preview: true }) });
+    } catch (e: any) {
+      toast(`Couldn't check: ${e.message}`, 'error');
+      return;
+    }
+
+    const replacing =
+      p.previousValue == null
+        ? `${monthLabel(p.date)} has no MooMoo value yet.`
+        : `${monthLabel(p.date)} currently reads ${rm(p.previousValue)} — this would change it by ${signedRm(
+            p.difference,
+          )}.`;
+    const staleNote =
+      p.staleMonths > 0
+        ? ` Your positions import is from ${p.positionsDate}, ${p.staleMonths} month${
+            p.staleMonths === 1 ? '' : 's'
+          } before that — pushing it would replace a newer figure with an older one.`
+        : '';
+
+    const ok = await confirmDialog({
+      title: `Write ${rm(p.value)} into MooMoo for ${monthLabel(p.date)}?`,
+      body: replacing + staleNote,
+      confirmLabel: 'Overwrite',
+      danger: p.staleMonths > 0,
+    });
+    if (!ok) return;
+
+    try {
+      const r = await api('/holdings/push-to-networth', { method: 'POST', body: JSON.stringify({}) });
+      setPushMsg(
+        `Pushed ${rm(r.value)} into MooMoo for ${monthLabel(r.date)}` +
+          (r.previousValue == null ? '.' : ` (was ${rm(r.previousValue)}).`),
+      );
+      setTimeout(() => setPushMsg(''), 6000);
+    } catch (e: any) {
+      toast(`Couldn't push: ${e.message}`, 'error');
+    }
   };
 
   if (!h.snapshot) {
@@ -90,6 +138,24 @@ export default function Holdings() {
         }
       />
       {pushMsg && <div className="text-xs text-gain">{pushMsg}</div>}
+
+      {/* The import and the account balance drift apart between imports; say by
+          how much rather than letting an old total read as current. */}
+      {acctCmp && acctCmp.previousValue != null && Math.abs(acctCmp.difference) >= 1 && (
+        <Card className="p-3 text-xs flex gap-2 items-start border border-warn">
+          <Info size={14} className="text-warn mt-0.5 shrink-0" />
+          <span>
+            These holdings are from{' '}
+            <span className="text-text font-medium">{acctCmp.positionsDate}</span> and total{' '}
+            <span className="text-text font-medium">{rm(acctCmp.value)}</span>, but your MooMoo
+            account for {monthLabel(acctCmp.date)} reads{' '}
+            <span className="text-text font-medium">{rm(acctCmp.previousValue)}</span> — a{' '}
+            {rm(Math.abs(acctCmp.difference))} gap. Net worth uses the account figure; this page
+            only reflects the last import. Import a fresh CSV to close the gap
+            {acctCmp.staleMonths > 0 && ', and note that pushing this one would move the account backwards'}.
+          </span>
+        </Card>
+      )}
 
       {/* summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -247,6 +247,10 @@ function round(x: number, dp = 2): number {
 // ---- Companion: drift alerts + monthly review ------------------------------
 const DEFAULT_SINGLE_STOCK_CAP = 13; // % of MooMoo portfolio
 
+// Debt worth surfacing as a portfolio fact rather than noise. Below this a
+// credit-card balance paid off monthly would flag every month.
+const LEVERAGE_FLAG_PCT = 20; // % of gross assets
+
 // Groups of related holdings to watch as a combined bet (from the advisor pack).
 const EXPOSURE_GROUPS: { label: string; symbols: string[]; cap: number }[] = [
   { label: 'Semiconductors', symbols: ['MRVL', 'MU', 'NVDA', 'AVGO', 'TSM', 'QCOM', 'AMD', 'INTC', 'SMCI'], cap: 35 },
@@ -255,7 +259,7 @@ const EXPOSURE_GROUPS: { label: string; symbols: string[]; cap: number }[] = [
 
 export function driftAlerts(db: Database.Database, cap = DEFAULT_SINGLE_STOCK_CAP) {
   const h: any = holdingsLatest(db);
-  const alerts: { level: string; symbol?: string; msg: string }[] = [];
+  const alerts: { level: string; symbol?: string; label?: string; msg: string }[] = [];
   if (h.summary) {
     // single-stock caps
     for (const p of h.positions) {
@@ -279,6 +283,35 @@ export function driftAlerts(db: Database.Database, cap = DEFAULT_SINGLE_STOCK_CA
       }
     }
   }
+  // Portfolio-level leverage. Reported as a fact with the numbers behind it —
+  // borrowing to invest is a deliberate strategy, not an error, but it belongs
+  // on screen next to the concentration flags rather than nowhere.
+  const nw = netWorthSeries(db);
+  if (nw.length) {
+    const latest = nw[nw.length - 1];
+    const gross = latest.bank + latest.investment;
+    const pct = gross > 0 ? (latest.liability / gross) * 100 : 0;
+    if (pct >= LEVERAGE_FLAG_PCT) {
+      const financed = db
+        .prepare(
+          `SELECT a.name, s.value v FROM snapshots s JOIN accounts a ON a.id=s.account_id
+           WHERE a.category='Liability' AND a.subtype='Loan' AND s.date=? AND s.value>0
+           ORDER BY s.value DESC LIMIT 1`,
+        )
+        .get(latest.date) as any;
+      alerts.push({
+        level: 'info',
+        label: 'leverage',
+        msg:
+          `Debt is ${pct.toFixed(0)}% of gross assets ` +
+          `(RM ${Math.round(latest.liability).toLocaleString('en-MY')} against ` +
+          `RM ${Math.round(gross).toLocaleString('en-MY')})` +
+          (financed ? `, mostly ${financed.name}.` : '.') +
+          ' Net worth already accounts for it; the FIRE projection nets it off too.',
+      });
+    }
+  }
+
   return { cap, asOf: h.snapshot?.import_date ?? null, alerts };
 }
 
@@ -295,7 +328,11 @@ export function monthlyReviewSummary(db: Database.Database) {
          WHERE a.name='Net Salary' ORDER BY s.date DESC LIMIT 1`,
       )
       .get() as any)?.v || 0;
-  const invested = last.investment - prev.investment;
+  // Net of borrowing: a debt-funded purchase raises the investment balance
+  // without being money that was saved. Measured gross, the month an ASB
+  // financing lands reads as a six-figure "inflow" and a savings rate in the
+  // thousands of percent.
+  const invested = last.investment - last.liability - (prev.investment - prev.liability);
   const savingsRate = income > 0 ? (invested / income) * 100 : null;
   const alloc: any = latestAllocation(db);
   const drift = driftAlerts(db).alerts;
@@ -311,8 +348,19 @@ export function monthlyReviewSummary(db: Database.Database) {
       .slice(0, 3)
       .map((i: any) => `${i.label} ${i.pct.toFixed(0)}%`)
       .join(', ')}.`,
-    drift.length ? `⚠ ${drift.length} concentration flag(s): ${drift.map((d: any) => d.symbol).join(', ')}.` : 'No concentration flags.',
+    drift.length
+      ? `⚠ ${drift.length} flag(s): ${drift.map((d: any) => d.symbol || d.label || 'portfolio').join(', ')}.`
+      : 'No concentration flags.',
   ];
+  if (last.liability > 0) {
+    lines.splice(
+      2,
+      0,
+      `Debt ${fmtRm(last.liability)} (${fmtDelta(last.liability - prev.liability)}) — ${(
+        (last.liability / (last.bank + last.investment)) * 100
+      ).toFixed(0)}% of gross assets.`,
+    );
+  }
   return { date: last.date, summary: lines.join('\n'), drift, savingsRate, income };
 }
 

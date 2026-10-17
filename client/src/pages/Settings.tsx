@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, FileJson, FileSpreadsheet, FileText, Lock, ShieldCheck, RefreshCw, Sparkles, Settings as SettingsIcon } from 'lucide-react';
 import { api, setToken, clearToken } from '../lib/api';
-import { Card, CardHeader, Field, TextInput, Button, Toggle, PageSkeleton, PageHeader } from '../components/ui';
+import { Card, CardHeader, Field, TextInput, SelectInput, Button, Toggle, PageSkeleton, PageHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useUiVersion } from '../lib/uiVersion';
 
@@ -113,7 +113,22 @@ export default function Settings() {
           <Field label="Zakat nisab (RM — 85g gold value)">
             <TextInput type="number" step="100" value={s.nisab ?? 30000} onChange={(e) => update({ nisab: Number(e.target.value) })} />
           </Field>
+          <Field label="Zakat: debt deducted">
+            <SelectInput
+              value={s.zakat_debt_basis ?? 'all'}
+              onChange={(e) => update({ zakat_debt_basis: e.target.value })}
+            >
+              <option value="all">All debt, in full</option>
+              <option value="short_term">Only debt due now (exclude long-term financing)</option>
+            </SelectInput>
+          </Field>
         </div>
+        <p className="mt-3 text-xs text-muted">
+          Whether a long-term financing (e.g. ASB financing) is deductible in full when computing
+          zakatable wealth is a fiqh question, not a calculation. Both bases are shown side by side on
+          the Goals page — verify the treatment with your own authority and set it here. This app does
+          not rule on it.
+        </p>
       </Card>
 
       <SecurityCard passcodeSet={!!s.passcode_set} onChanged={() => api('/settings').then(setS)} />

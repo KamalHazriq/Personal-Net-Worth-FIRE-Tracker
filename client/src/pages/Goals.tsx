@@ -99,8 +99,36 @@ export default function Goals() {
             </div>
           </div>
           <div className="text-xs text-muted">
-            Breakdown: Bank ({rm(data.zakat.bank)}) + Investments ({rm(data.zakat.investments)}) − Liabilities ({rm(data.zakat.liabilities)}) − EPF ({rm(data.zakat.epf)})
+            Breakdown: Bank ({rm(data.zakat.bank)}) + Investments ({rm(data.zakat.investments)}) − EPF ({rm(data.zakat.epf)}) − debt deducted ({rm(data.zakat.deducted)})
           </div>
+          {data.zakat.longTermDebt > 0 && (
+            <div className="mt-3 pt-3 border-t border-border text-xs space-y-1">
+              <div>
+                Debt deducted on the{' '}
+                <span className="text-text font-medium">
+                  {data.zakat.basis === 'short_term' ? 'due-now' : 'all debt'}
+                </span>{' '}
+                basis: {rm(data.zakat.shortTermDebt)} due now
+                {data.zakat.basis === 'short_term'
+                  ? `, and ${rm(data.zakat.longTermDebt)} of long-term financing left in.`
+                  : ` plus ${rm(data.zakat.longTermDebt)} of long-term financing.`}
+              </div>
+              <div className="text-muted">
+                On the other basis zakat would be{' '}
+                <span className="text-text font-medium tabular-nums">
+                  {rm(
+                    data.zakat.basis === 'short_term'
+                      ? data.zakat.alternatives?.all?.zakat_due
+                      : data.zakat.alternatives?.short_term?.zakat_due,
+                  )}
+                </span>
+                {' '}— a {rm(Math.abs((data.zakat.alternatives?.all?.zakat_due ?? 0) - (data.zakat.alternatives?.short_term?.zakat_due ?? 0)))} difference.
+                Whether a long-term financing is deductible in full is a fiqh question, not a
+                calculation — verify the treatment with your own authority, then set the basis in
+                Settings. This tool does not rule on it.
+              </div>
+            </div>
+          )}
         </Card>
       )}
 

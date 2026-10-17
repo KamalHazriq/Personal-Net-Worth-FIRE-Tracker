@@ -179,6 +179,10 @@ const MIGRATIONS = [
   'DROP TABLE IF EXISTS assistant_log',
   'ALTER TABLE settings DROP COLUMN assistant_model',
   'ALTER TABLE settings DROP COLUMN web_search_enabled',
+  // Which debts are deducted when computing zakatable wealth: 'all' (every
+  // liability in full) or 'short_term' (only debt due now, excluding long-term
+  // financing). Defaults to 'all' so an existing figure doesn't change by itself.
+  `ALTER TABLE settings ADD COLUMN zakat_debt_basis TEXT NOT NULL DEFAULT 'all'`,
 ];
 
 export function initSchema(db: Database.Database) {

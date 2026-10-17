@@ -40,6 +40,8 @@ export function createApp(db: Database.Database) {
   app.use(cors());
   app.use(express.json({ limit: '5mb' }));
 
+  const round2 = (x: number) => Math.round(x * 100) / 100;
+
   const num = (v: any, fallback: number | null): number | null => {
     if (v === undefined || v === null || v === '') return fallback;
     const n = Number(v);
@@ -103,7 +105,9 @@ export function createApp(db: Database.Database) {
 
   // ---- Settings ----
   app.get('/api/settings', (_req, res) => res.json(publicSettings()));
-  const NUMERIC_SETTINGS = new Set([
+  const ZAKAT_DEBT_BASES = ['all', 'short_term'];
+
+const NUMERIC_SETTINGS = new Set([
     'usd_myr_rate',
     'current_age',
     'target_retire_age',
@@ -114,7 +118,7 @@ export function createApp(db: Database.Database) {
   ]);
 
   app.put('/api/settings', (req, res) => {
-    const allowed = [...NUMERIC_SETTINGS];
+    const allowed = [...NUMERIC_SETTINGS, 'zakat_debt_basis'];
     const sets: string[] = [];
     const vals: any[] = [];
     for (const k of allowed) {
@@ -128,6 +132,8 @@ export function createApp(db: Database.Database) {
         // FIRE number by 100.
         if (k === 'swr' && (v <= 0 || v > 1))
           return res.status(400).json({ error: 'swr must be a fraction between 0 and 1 (e.g. 0.05 for 5%)' });
+      } else if (k === 'zakat_debt_basis' && !ZAKAT_DEBT_BASES.includes(v)) {
+        return res.status(400).json({ error: `zakat_debt_basis must be one of ${ZAKAT_DEBT_BASES.join(', ')}` });
       }
       sets.push(`${k}=?`);
       vals.push(v);
@@ -498,39 +504,74 @@ export function createApp(db: Database.Database) {
     res.json({ ok: true });
   });
 
+  // Zakat on wealth: 2.5% of zakatable assets once they clear the nisab.
+  //
+  // Which debts are deductible is a fiqh question, not a settled calculation.
+  // One view deducts every liability in full; another deducts only what is
+  // actually due now, treating long-term financing as an ongoing obligation
+  // rather than a reduction of this year's wealth. With a large ASB-financing
+  // style loan the two give very different answers, so both are returned, the
+  // user chooses the basis in Settings, and the UI says to verify it with
+  // their own authority. EPF is always excluded — it isn't accessible.
   app.get('/api/zakat', (_req, res) => {
-    const nisab = (getSettings(db) as any).nisab ?? 30000;
+    const settings = getSettings(db) as any;
+    const nisab = settings.nisab ?? 30000;
+    const basis: string = ZAKAT_DEBT_BASES.includes(settings.zakat_debt_basis)
+      ? settings.zakat_debt_basis
+      : 'all';
     const latestDate = (db.prepare('SELECT MAX(date) d FROM snapshots').get() as any)?.d;
-    if (!latestDate) return res.json({ zakatable_wealth: 0, nisab, zakat_due: 0, bank: 0, investments: 0, liabilities: 0, epf: 0 });
+    if (!latestDate)
+      return res.json({
+        zakatable_wealth: 0, nisab, zakat_due: 0, deducted: 0, bank: 0, investments: 0,
+        liabilities: 0, shortTermDebt: 0, longTermDebt: 0, epf: 0, grossWealth: 0,
+        basis, alternatives: {},
+      });
 
-    const rows = db.prepare(`
-      SELECT a.category, a.is_epf, SUM(s.value) as v
-      FROM snapshots s JOIN accounts a ON a.id = s.account_id
-      WHERE s.date = ?
-      GROUP BY a.category, a.is_epf
-    `).all(latestDate) as any[];
+    const rows = db
+      .prepare(
+        `SELECT a.category, a.subtype, a.is_epf, SUM(s.value) as v
+         FROM snapshots s JOIN accounts a ON a.id = s.account_id
+         WHERE s.date = ?
+         GROUP BY a.category, a.subtype, a.is_epf`,
+      )
+      .all(latestDate) as any[];
 
-    let bank = 0, investments = 0, liabilities = 0, epf = 0;
+    let bank = 0, investments = 0, epf = 0, shortTermDebt = 0, longTermDebt = 0;
     for (const r of rows) {
       if (r.category === 'Bank') bank += r.v;
-      if (r.category === 'Investment') {
+      else if (r.category === 'Investment') {
         investments += r.v;
         if (r.is_epf) epf += r.v;
+      } else if (r.category === 'Liability') {
+        // A 'Loan' is long-term financing; anything else (a card) is due now.
+        if (r.subtype === 'Loan') longTermDebt += r.v;
+        else shortTermDebt += r.v;
       }
-      if (r.category === 'Liability') liabilities += r.v;
     }
 
-    const zakatable_wealth = Math.max(0, bank + (investments - epf) - liabilities);
-    const zakat_due = zakatable_wealth >= nisab ? zakatable_wealth * 0.025 : 0;
+    const grossWealth = bank + (investments - epf);
+    const forBasis = (b: string) => {
+      const deducted = b === 'short_term' ? shortTermDebt : shortTermDebt + longTermDebt;
+      const wealth = Math.max(0, grossWealth - deducted);
+      return {
+        deducted: round2(deducted),
+        zakatable_wealth: round2(wealth),
+        zakat_due: round2(wealth >= nisab ? wealth * 0.025 : 0),
+      };
+    };
 
     res.json({
-      zakatable_wealth,
+      ...forBasis(basis),
       nisab,
-      zakat_due,
       bank,
       investments,
-      liabilities,
-      epf
+      epf,
+      liabilities: round2(shortTermDebt + longTermDebt),
+      shortTermDebt: round2(shortTermDebt),
+      longTermDebt: round2(longTermDebt),
+      grossWealth: round2(grossWealth),
+      basis,
+      alternatives: { all: forBasis('all'), short_term: forBasis('short_term') },
     });
   });
 

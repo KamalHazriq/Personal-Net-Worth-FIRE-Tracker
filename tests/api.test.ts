@@ -31,7 +31,8 @@ beforeEach(() => {
   clearData(db);
   db.prepare(
     `UPDATE settings SET passcode_hash=NULL, swr=0.04, current_age=24, target_retire_age=45,
-     epf_unlock_age=55, fire_target_monthly_income=10000, usd_myr_rate=4.09, nisab=30000 WHERE id=1`,
+     epf_unlock_age=55, fire_target_monthly_income=10000, usd_myr_rate=4.09, nisab=30000,
+     zakat_debt_basis='all' WHERE id=1`,
   ).run();
   revokeAllTokens();
 });
@@ -218,6 +219,60 @@ test('GET /api/export/csv escapes quotes and neutralises formula prefixes', asyn
 });
 
 // ------------------------------------------------------------------- zakat --
+
+test('GET /api/zakat separates long-term financing from debt due now', async () => {
+  const bank = addAccount('Bank', 'Bank');
+  const stock = addAccount('Stocks', 'Investment', 'Stocks');
+  const card = addAccount('Card', 'Liability', 'CreditCard');
+  const loan = addAccount('ASB financing', 'Liability', 'Loan');
+  const snap = db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)');
+  snap.run(bank, '2026-01-31', 10000);
+  snap.run(stock, '2026-01-31', 100000);
+  snap.run(card, '2026-01-31', 500);
+  snap.run(loan, '2026-01-31', 80000);
+  await api('/api/settings', { method: 'PUT', body: { nisab: 1000 } });
+
+  const r = await api('/api/zakat');
+  assert.equal(r.body.shortTermDebt, 500);
+  assert.equal(r.body.longTermDebt, 80000);
+  assert.equal(r.body.grossWealth, 110000);
+
+  // Default basis deducts everything.
+  assert.equal(r.body.basis, 'all');
+  assert.equal(r.body.zakatable_wealth, 29500);
+  assert.equal(r.body.zakat_due, 737.5);
+
+  // Both treatments are always reported so the choice is visible.
+  assert.equal(r.body.alternatives.short_term.zakatable_wealth, 109500);
+  assert.equal(r.body.alternatives.short_term.zakat_due, 2737.5);
+});
+
+test('GET /api/zakat follows the configured debt basis', async () => {
+  const bank = addAccount('Bank', 'Bank');
+  const loan = addAccount('ASB financing', 'Liability', 'Loan');
+  const snap = db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)');
+  snap.run(bank, '2026-01-31', 100000);
+  snap.run(loan, '2026-01-31', 80000);
+  await api('/api/settings', { method: 'PUT', body: { nisab: 1000 } });
+
+  await api('/api/settings', { method: 'PUT', body: { zakat_debt_basis: 'short_term' } });
+  const shortTerm = await api('/api/zakat');
+  assert.equal(shortTerm.body.basis, 'short_term');
+  assert.equal(shortTerm.body.zakatable_wealth, 100000); // the financing is left in
+  assert.equal(shortTerm.body.zakat_due, 2500);
+
+  await api('/api/settings', { method: 'PUT', body: { zakat_debt_basis: 'all' } });
+  const all = await api('/api/zakat');
+  assert.equal(all.body.zakatable_wealth, 20000);
+  assert.equal(all.body.zakat_due, 500);
+});
+
+test('PUT /api/settings rejects an unknown zakat debt basis', async () => {
+  const r = await api('/api/settings', { method: 'PUT', body: { zakat_debt_basis: 'whatever' } });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /zakat_debt_basis must be one of/);
+  assert.equal((await api('/api/zakat')).body.basis, 'all');
+});
 
 test('GET /api/zakat nets liabilities and EPF out of zakatable wealth', async () => {
   const bank = addAccount('Bank', 'Bank');

@@ -10,8 +10,8 @@ import { badgeStyle } from '../lib/palette';
 const CATEGORIES = ['Bank', 'Income', 'Liability', 'Investment'];
 const SUBTYPES: Record<string, string[]> = {
   Bank: ['Bank', 'MMF', 'HYSA'],
-  Income: ['Salary', 'Cashback'],
-  Liability: ['CreditCard'],
+  Income: ['Salary', 'Cashback', 'SideIncome'],
+  Liability: ['CreditCard', 'Loan'],
   Investment: ['ASB', 'EPF', 'Wahed', 'Gold', 'Crypto', 'Stocks', 'Other'],
 };
 

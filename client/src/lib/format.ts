@@ -17,6 +17,12 @@ export function pct(n: number | null | undefined, dp = 1): string {
   return (v > 0 ? '+' : '') + v.toFixed(dp) + '%';
 }
 
+/** A share of a total as "12%" — guards divide-by-zero. No +/- sign. */
+export function pctOf(part: number | null | undefined, total: number | null | undefined, dp = 0): string {
+  if (!part || !total) return '0%';
+  return ((part / total) * 100).toFixed(dp) + '%';
+}
+
 export function signedRm(n: number | null | undefined): string {
   if (n == null) return rm(0);
   return (n > 0 ? '+' : n < 0 ? '-' : '') + rm(Math.abs(n));

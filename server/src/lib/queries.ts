@@ -181,11 +181,17 @@ export function investmentsSummary(db: Database.Database) {
       };
     })
     .sort((a, b) => b.balance - a.balance);
+  // Each platform contributes its OWN latest month, so this total can be a blend
+  // of different dates and will lag the account snapshots. Surface the range so
+  // the UI can label it instead of implying it is current.
+  const months = rows.map((r) => r.month).filter(Boolean).sort();
   return {
     totalCapital: round(totalCapital),
     totalValue: round(totalValue),
     totalPL: round(totalValue - totalCapital),
     plPct: totalCapital ? round(((totalValue - totalCapital) / totalCapital) * 100, 2) : 0,
+    asOf: months.length ? months[months.length - 1] : null,
+    oldestAsOf: months.length ? months[0] : null,
     perPlatform,
   };
 }
@@ -197,12 +203,17 @@ export function dashboardSummary(db: Database.Database) {
   const latest = series[series.length - 1];
   const prev = series.length > 1 ? series[series.length - 2] : null;
 
-  // average monthly deltas (net worth growth)
+  // Average monthly deltas. Invested-per-month is measured NET of borrowing:
+  // a debt-funded purchase (e.g. ASB financing) raises the investment balance
+  // without being money the user actually put in, and counting it gross
+  // overstates the savings rate by the whole loan in the month it lands.
   const deltas: number[] = [];
   const investDeltas: number[] = [];
   for (let i = 1; i < series.length; i++) {
     deltas.push(series[i].netWorth - series[i - 1].netWorth);
-    investDeltas.push(series[i].investment - series[i - 1].investment);
+    const netNow = series[i].investment - series[i].liability;
+    const netPrev = series[i - 1].investment - series[i - 1].liability;
+    investDeltas.push(netNow - netPrev);
   }
   const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
@@ -215,8 +226,10 @@ export function dashboardSummary(db: Database.Database) {
     epf: latest.epf,
     bank: latest.bank,
     investment: latest.investment,
+    liability: latest.liability,
     momNetWorth: prev ? round(latest.netWorth - prev.netWorth) : 0,
     momNetWorthExEpf: prev ? round(latest.netWorthExEpf - prev.netWorthExEpf) : 0,
+    momLiability: prev ? round(latest.liability - prev.liability) : 0,
     avgMonthlyGrowth: round(avg(deltas)),
     avgMonthlyInvested: round(avg(investDeltas)),
     liquid: round(latest.netWorth - latest.epf),
@@ -337,7 +350,40 @@ export function fireSeed(db: Database.Database) {
   const cashStart =
     (db.prepare(`SELECT SUM(s.value) t FROM snapshots s JOIN accounts a ON a.id=s.account_id WHERE a.category='Bank' AND s.date=?`).get(latestDate) as any).t || 0;
 
-  return { settings, latestDate, cashStart: round(cashStart), accounts };
+  // Debts outstanding today. The `contributions` row doubles as the terms store
+  // for a liability: monthly_amount is the instalment and annual_return_rate is
+  // the financing rate (same shape, opposite sign of a contribution).
+  // `recentMonthlyChange` is the observed average balance movement over the last
+  // few months — shown in the UI purely as a hint for entering real terms.
+  const liabilities = (
+    db
+      .prepare(
+        `SELECT a.id, a.name, a.subtype,
+           COALESCE(c.monthly_amount,0) monthlyPayment,
+           COALESCE(c.annual_return_rate,0) annualRate,
+           COALESCE(c.excluded,0) excluded,
+           COALESCE((SELECT s.value FROM snapshots s WHERE s.account_id=a.id AND s.date=?), 0) startBalance
+         FROM accounts a LEFT JOIN contributions c ON c.account_id=a.id
+         WHERE a.category='Liability'
+         ORDER BY a.sort_order, a.id`,
+      )
+      .all(latestDate) as any[]
+  )
+    .filter((l) => l.startBalance > 0)
+    .map((l) => {
+      // Only months the debt actually existed — including the month it was taken
+      // out would read the whole drawdown as a monthly movement.
+      const hist = db
+        .prepare('SELECT value FROM snapshots WHERE account_id=? AND value>0 ORDER BY date DESC LIMIT 4')
+        .all(l.id) as any[];
+      let recentMonthlyChange = 0;
+      if (hist.length > 1) {
+        recentMonthlyChange = (hist[0].value - hist[hist.length - 1].value) / (hist.length - 1);
+      }
+      return { ...l, startBalance: round(l.startBalance), recentMonthlyChange: round(recentMonthlyChange) };
+    });
+
+  return { settings, latestDate, cashStart: round(cashStart), accounts, liabilities };
 }
 
 // ---- Investments P/L (Invest sheets) --------------------------------------

@@ -12,8 +12,10 @@ export const CATEGORY_COLORS: Record<string, string> = {
   HYSA: '#7aa2ff',
   Other: '#6b7787',
   CreditCard: '#f6685e',
+  Loan: '#c0392b',
   Salary: '#2ec27e',
   Cashback: '#ff8a5c',
+  SideIncome: '#19b3a6',
 };
 
 /** Tinted chip style for a subtype badge (15% bg, full-strength text). */

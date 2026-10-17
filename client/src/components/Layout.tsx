@@ -8,20 +8,17 @@ import {
   Flame,
   Target,
   BookOpen,
-  Sparkles,
   Settings,
   Moon,
   Sun,
   Menu,
   X,
-  MessageCircle,
   Repeat,
   Palette,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useUiVersion } from '../lib/uiVersion';
 import { cn } from './ui';
-import { AssistantPanel } from './Assistant';
 
 // Grouped for "New UI" (Settings → Appearance) — classic mode renders the same
 // items flat, ungrouped, exactly as before. Settings is pinned separately below.
@@ -51,7 +48,6 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string; icon: any
     label: 'Tools',
     items: [
       { to: '/studio', label: 'Studio', icon: Palette },
-      { to: '/assistant', label: 'Assistant', icon: Sparkles },
     ],
   },
 ];
@@ -61,7 +57,6 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { version } = useUiVersion();
   const isNew = version !== 'classic'; // grouped nav for both 'new' and 'v3'
   const [open, setOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -142,17 +137,6 @@ export default function Layout({ children }: { children: ReactNode }) {
         <main className="p-4 md:p-8 max-w-7xl mx-auto">{children}</main>
       </div>
 
-      {/* Always-available assistant */}
-      <button
-        onClick={() => setAssistantOpen(true)}
-        className="fixed z-30 bottom-5 right-5 flex items-center gap-2 rounded-full bg-accent text-white px-4 py-3 shadow-lg hover:opacity-90"
-        title="My Finances assistant"
-        aria-label="Open My Finances assistant"
-      >
-        <MessageCircle size={18} />
-        <span className="text-sm font-medium hidden sm:inline">My Finances</span>
-      </button>
-      <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   );
 }

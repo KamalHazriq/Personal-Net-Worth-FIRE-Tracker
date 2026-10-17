@@ -12,7 +12,8 @@ import {
 } from 'recharts';
 import { Flame, Lock, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
-import { rm, pct, safeJson } from '../lib/format';
+import { rm, pct, signedRm, safeJson } from '../lib/format';
+import { badgeStyle } from '../lib/palette';
 import { Card, CardHeader, Stat, Badge, Button, cn, PageSkeleton, PageHeader, Modal, Field, TextInput } from '../components/ui';
 import { useToast } from '../components/Toast';
 import {
@@ -22,6 +23,7 @@ import {
   fireNumber,
   type FireAccount,
   type FireInputs,
+  type FireLiability,
 } from '../lib/fireEngine';
 
 const SCEN_COLORS = ['#4f8cff', '#2ec27e', '#f5b301', '#a06bff'];
@@ -38,6 +40,7 @@ export default function Fire() {
   const [seed, setSeed] = useState<any>(null);
   const [p, setP] = useState({ currentAge: 24, targetRetireAge: 45, epfUnlockAge: 55, swr: 0.04, targetIncome: 10000, horizonAge: 60 });
   const [accts, setAccts] = useState<FireAccount[]>([]);
+  const [debts, setDebts] = useState<(FireLiability & { recentMonthlyChange?: number })[]>([]);
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [namingScenario, setNamingScenario] = useState(false);
@@ -67,13 +70,25 @@ export default function Fire() {
           excluded: !!a.excluded,
         })),
       );
+      setDebts(
+        (d.liabilities ?? []).map((l: any) => ({
+          id: l.id,
+          name: l.name,
+          subtype: l.subtype,
+          startBalance: l.startBalance,
+          monthlyPayment: l.monthlyPayment,
+          annualRate: l.annualRate,
+          excluded: !!l.excluded,
+          recentMonthlyChange: l.recentMonthlyChange,
+        })),
+      );
     });
     api('/scenarios').then(setScenarios);
   }, []);
 
   const inputs: FireInputs | null = useMemo(
-    () => (seed ? { ...p, cashStart: seed.cashStart, cashReturn: 0, accounts: accts } : null),
-    [seed, p, accts],
+    () => (seed ? { ...p, cashStart: seed.cashStart, cashReturn: 0, accounts: accts, liabilities: debts } : null),
+    [seed, p, accts, debts],
   );
   const result = useMemo(() => (inputs ? project(inputs) : null), [inputs]);
 
@@ -128,6 +143,15 @@ export default function Fire() {
     }).catch((e: any) => toast(`Couldn't save ${a.name}: ${e.message}`, 'error'));
   };
 
+  const setDebt = (id: number, patch: Partial<FireLiability>) => {
+    setDebts((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+    const l = { ...debts.find((x) => x.id === id)!, ...patch };
+    api(`/contributions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ monthly_amount: l.monthlyPayment, annual_return_rate: l.annualRate }),
+    }).catch((e: any) => toast(`Couldn't save ${l.name}: ${e.message}`, 'error'));
+  };
+
   const toggleExcluded = async (id: number) => {
     setAccts((prev) => prev.map((a) => (a.id === id ? { ...a, excluded: !a.excluded } : a)));
     try {
@@ -158,10 +182,14 @@ export default function Fire() {
   // A non-positive SWR makes the FIRE number infinite and is rejected by the
   // API, so it's shown as unset rather than as "RM ∞".
   const swrInvalid = !(p.swr > 0);
-  const accessibleStart = seed.cashStart + accts.filter((a) => !a.is_epf && !a.excluded).reduce((s, a) => s + a.startBalance, 0);
+  const totalDebt = debts.filter((l) => !l.excluded).reduce((s, l) => s + l.startBalance, 0);
+  // Net of debt: borrowed money sitting in an asset is not money you own, so the
+  // "what must I contribute" solver has to start from the net figure.
+  const accessibleStart =
+    seed.cashStart + accts.filter((a) => !a.is_epf && !a.excluded).reduce((s, a) => s + a.startBalance, 0) - totalDebt;
 
   const saveScenario = async (name: string) => {
-    const params_json = JSON.stringify({ ...p, cashStart: seed.cashStart, accounts: accts });
+    const params_json = JSON.stringify({ ...p, cashStart: seed.cashStart, accounts: accts, liabilities: debts });
     const sc = await api('/scenarios', { method: 'POST', body: JSON.stringify({ name, params_json }) });
     setScenarios((s) => [...s, sc]);
     setNamingScenario(false);
@@ -222,7 +250,16 @@ export default function Fire() {
           label={`Accessible at ${p.targetRetireAge}`}
           value={rm(result.atTarget?.accessible)}
           tone={result.atTarget && result.atTarget.accessible >= fn ? 'gain' : 'loss'}
-          sub={`supports ${rm(result.monthlyIncomeAtTarget)}/mo`}
+          sub={
+            <span>
+              supports {rm(result.monthlyIncomeAtTarget)}/mo
+              {result.startDebt > 0 && (
+                <span className="block text-[10px] text-muted mt-0.5">
+                  after netting {rm(result.atTarget?.debt ?? 0)} of debt still owed
+                </span>
+              )}
+            </span>
+          }
         />
         <Stat label={`EPF unlocks at ${p.epfUnlockAge}`} value={rm(result.atTarget?.epf)} tone="locked" sub="locked until then">
           <Lock size={12} className="text-locked mt-1" />
@@ -304,6 +341,80 @@ export default function Fire() {
 
       {/* target income cases + sensitivity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Debts — borrowed money inflates the asset side, so the projection has to
+          carry the obligation or it compounds money that isn't yours. */}
+      {debts.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Debts"
+            subtitle="Subtracted from the projection. Enter the instalment and rate to amortise them — left at 0 the balance is carried flat."
+          />
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-wide text-muted border-b border-border">
+                  <th className="text-left px-3 py-2">Debt</th>
+                  <th className="text-right px-3 py-2">Outstanding</th>
+                  <th className="text-right px-3 py-2">Instalment / mo</th>
+                  <th className="text-right px-3 py-2">Rate %</th>
+                  <th className="text-right px-3 py-2">Observed / mo</th>
+                  <th className="text-right px-3 py-2">Cleared</th>
+                </tr>
+              </thead>
+              <tbody>
+                {debts.map((l) => {
+                  const mr = l.annualRate > 0 ? Math.pow(1 + l.annualRate, 1 / 12) - 1 : 0;
+                  const charge = l.startBalance * mr;
+                  const principal = l.monthlyPayment - charge;
+                  const standsStill = l.monthlyPayment > 0 && principal <= 0;
+                  return (
+                    <tr key={l.id} className="border-b border-border/50 last:border-0">
+                      <td className="px-3 py-2">
+                        <span>{l.name}</span>
+                        <span
+                          className="ml-2 text-[10px] font-medium rounded-md px-1.5 py-0.5 uppercase tracking-wide"
+                          style={badgeStyle(l.subtype)}
+                        >
+                          {l.subtype}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-loss">{rm(l.startBalance)}</td>
+                      <NumTd value={l.monthlyPayment} onCommit={(v) => setDebt(l.id, { monthlyPayment: v })} prefix="RM" />
+                      <NumTd
+                        value={l.annualRate * 100}
+                        onCommit={(v) => setDebt(l.id, { annualRate: v / 100 })}
+                        suffix="%"
+                        dp={2}
+                      />
+                      <td className="px-3 py-2 text-right tabular-nums text-xs text-muted">
+                        {l.recentMonthlyChange == null ? '—' : signedRm(l.recentMonthlyChange)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs">
+                        {l.monthlyPayment <= 0 ? (
+                          <span className="text-muted">carried flat</span>
+                        ) : standsStill ? (
+                          <span className="text-loss">never — instalment below the {rm(charge)}/mo charge</span>
+                        ) : (
+                          <span className="text-gain">{rm(principal)}/mo off principal</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-3 py-2 text-xs text-muted border-t border-border">
+            {rm(totalDebt)} total debt
+            {result.debtClearedAge != null
+              ? ` · fully cleared by age ${result.debtClearedAge}`
+              : ' · still outstanding at the end of the projection'}
+            . The "observed" column is the average monthly balance movement from your own
+            snapshots — a sanity check for the instalment you enter.
+          </div>
+        </Card>
+      )}
+
         <Card>
           <CardHeader title="Target income cases" subtitle="FIRE number & age for RM5k / 10k / 15k per month" />
           <div className="p-3">

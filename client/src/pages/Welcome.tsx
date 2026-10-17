@@ -21,7 +21,7 @@ const STEPS = [
     to: '/settings',
     icon: SettingsIcon,
     title: 'Set your preferences',
-    body: 'USD/MYR rate, your age, target retirement age, safe withdrawal rate and FIRE target income. Optionally add an API key for the assistant.',
+    body: 'USD/MYR rate, your age, target retirement age, safe withdrawal rate and FIRE target income.',
     cta: 'Open Settings',
   },
 ];

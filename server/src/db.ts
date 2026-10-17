@@ -30,7 +30,6 @@ export function clearData(db: Database.Database) {
     'scenarios',
     'goals',
     'reviews',
-    'assistant_log',
   ];
   const tx = db.transaction(() => {
     for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
@@ -52,16 +51,14 @@ CREATE TABLE IF NOT EXISTS settings (
   target_retire_age INTEGER NOT NULL DEFAULT 45,
   epf_unlock_age INTEGER NOT NULL DEFAULT 55,
   fire_target_monthly_income REAL NOT NULL DEFAULT 10000,
-  swr REAL NOT NULL DEFAULT 0.04,
-  assistant_model TEXT NOT NULL DEFAULT 'claude-opus-5',
-  web_search_enabled INTEGER NOT NULL DEFAULT 1
+  swr REAL NOT NULL DEFAULT 0.04
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   category TEXT NOT NULL,            -- Bank | Income | Liability | Investment
-  subtype TEXT,                       -- Bank|MMF|HYSA|ASB|EPF|Wahed|Gold|Crypto|Stocks|Other|CreditCard|Cashback|Salary
+  subtype TEXT,                       -- Bank|MMF|HYSA|ASB|EPF|Wahed|Gold|Crypto|Stocks|Other|CreditCard|Loan|Cashback|Salary|SideIncome
   currency TEXT NOT NULL DEFAULT 'MYR',
   is_epf INTEGER NOT NULL DEFAULT 0,
   is_liquid INTEGER NOT NULL DEFAULT 1,
@@ -158,14 +155,6 @@ CREATE TABLE IF NOT EXISTS reviews (
   summary TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS assistant_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts TEXT NOT NULL DEFAULT (datetime('now')),
-  question TEXT NOT NULL,
-  answer TEXT,
-  used_web_search INTEGER NOT NULL DEFAULT 0
-);
-
 CREATE INDEX IF NOT EXISTS idx_snapshots_date ON snapshots(date);
 CREATE INDEX IF NOT EXISTS idx_positions_snapshot ON positions(snapshot_id);
 `;
@@ -185,14 +174,11 @@ const MIGRATIONS = [
   )`,
   'ALTER TABLE contributions ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE settings ADD COLUMN nisab REAL NOT NULL DEFAULT 30000',
-  // Point existing installs at the current model generation. Each maps to its
-  // own tier's successor so a deliberate Opus/Sonnet choice is preserved; the
-  // old IDs still work at the API but are no longer offered in Settings, which
-  // would otherwise leave the picker showing nothing selected.
-  // (claude-haiku-4-5 is still current and is intentionally left alone.)
-  `UPDATE settings SET assistant_model='claude-opus-5' WHERE assistant_model='claude-opus-4-8'`,
-  `UPDATE settings SET assistant_model='claude-sonnet-5' WHERE assistant_model='claude-sonnet-4-6'`,
-  `UPDATE settings SET assistant_model='claude-haiku-4-5' WHERE assistant_model='claude-haiku-4-5-20251001'`,
+  // The AI assistant was removed (it required a paid API key); drop its storage.
+  // Each statement is a no-op on a database that never had them.
+  'DROP TABLE IF EXISTS assistant_log',
+  'ALTER TABLE settings DROP COLUMN assistant_model',
+  'ALTER TABLE settings DROP COLUMN web_search_enabled',
 ];
 
 export function initSchema(db: Database.Database) {

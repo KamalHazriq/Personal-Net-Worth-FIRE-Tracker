@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Download, FileJson, FileSpreadsheet, FileText, KeyRound, CheckCircle2, XCircle, Lock, ShieldCheck, RefreshCw, Sparkles, Settings as SettingsIcon } from 'lucide-react';
+import { Download, FileJson, FileSpreadsheet, FileText, Lock, ShieldCheck, RefreshCw, Sparkles, Settings as SettingsIcon } from 'lucide-react';
 import { api, setToken, clearToken } from '../lib/api';
-import { Card, CardHeader, Field, TextInput, SelectInput, Button, Toggle, PageSkeleton, PageHeader } from '../components/ui';
+import { Card, CardHeader, Field, TextInput, Button, Toggle, PageSkeleton, PageHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useUiVersion } from '../lib/uiVersion';
 
 export default function Settings() {
   const [s, setS] = useState<any>(null);
-  const [status, setStatus] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const toast = useToast();
@@ -15,7 +14,6 @@ export default function Settings() {
 
   useEffect(() => {
     api('/settings').then(setS);
-    api('/assistant/status').then(setStatus);
   }, []);
 
   const update = (patch: any) => {
@@ -115,35 +113,6 @@ export default function Settings() {
           <Field label="Zakat nisab (RM — 85g gold value)">
             <TextInput type="number" step="100" value={s.nisab ?? 30000} onChange={(e) => update({ nisab: Number(e.target.value) })} />
           </Field>
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <CardHeader title="AI Assistant" subtitle="Optional. Key read by the local backend only — never sent to the browser." />
-        <div className="mt-4 space-y-4">
-          <div className="flex items-center gap-2 text-sm">
-            <KeyRound size={16} className="text-muted" />
-            {status?.hasKey ? (
-              <span className="flex items-center gap-1 text-gain"><CheckCircle2 size={15} /> API key detected — Assistant enabled</span>
-            ) : (
-              <span className="flex items-center gap-1 text-muted"><XCircle size={15} /> No key. Add <code className="bg-surface-2 px-1 rounded mx-1">ANTHROPIC_API_KEY</code> to a <code className="bg-surface-2 px-1 rounded mx-1">.env</code> file and restart.</span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Model">
-              <SelectInput value={s.assistant_model} onChange={(e) => update({ assistant_model: e.target.value })}>
-                <option value="claude-opus-5">claude-opus-5 — most capable</option>
-                <option value="claude-sonnet-5">claude-sonnet-5 — balanced</option>
-                <option value="claude-haiku-4-5">claude-haiku-4-5 — fastest</option>
-              </SelectInput>
-            </Field>
-            <Field label="Web search (for current prices / Shariah lookups)">
-              <SelectInput value={s.web_search_enabled ? '1' : '0'} onChange={(e) => update({ web_search_enabled: Number(e.target.value) })}>
-                <option value="1">Enabled</option>
-                <option value="0">Disabled</option>
-              </SelectInput>
-            </Field>
-          </div>
         </div>
       </Card>
 

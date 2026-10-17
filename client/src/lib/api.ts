@@ -5,8 +5,8 @@ export const setToken = (t: string) => localStorage.setItem('authToken', t);
 export const clearToken = () => localStorage.removeItem('authToken');
 
 /**
- * `silent: true` marks a mutation that doesn't change financial data (assistant
- * chat, auth) so it won't broadcast `data:changed` and make every listening page
+ * `silent: true` marks a mutation that doesn't change financial data (auth, for
+ * example) so it won't broadcast `data:changed` and make every listening page
  * refetch for nothing.
  */
 export type ApiInit = RequestInit & { silent?: boolean };

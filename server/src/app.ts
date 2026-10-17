@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import type Database from 'better-sqlite3';
-import { buildContext, callAnthropic } from './lib/assistant.js';
 import { exportJson, exportSnapshotsCsv, exportXlsxBuffer } from './lib/exporter.js';
 import {
   hashPasscode,
@@ -115,7 +114,7 @@ export function createApp(db: Database.Database) {
   ]);
 
   app.put('/api/settings', (req, res) => {
-    const allowed = [...NUMERIC_SETTINGS, 'assistant_model', 'web_search_enabled'];
+    const allowed = [...NUMERIC_SETTINGS];
     const sets: string[] = [];
     const vals: any[] = [];
     for (const k of allowed) {
@@ -538,58 +537,12 @@ export function createApp(db: Database.Database) {
   app.get('/api/drift', (_req, res) => res.json(driftAlerts(db)));
 
   app.get('/api/reviews', (_req, res) => res.json(db.prepare('SELECT * FROM reviews ORDER BY date DESC').all()));
-  app.post('/api/reviews', async (req, res) => {
+  app.post('/api/reviews', (_req, res) => {
     const r = monthlyReviewSummary(db);
-    let summary = r.summary;
-    // optional Claude interpretation if a key is configured
-    if (process.env.ANTHROPIC_API_KEY && req.body?.interpret !== false) {
-      const settings = getSettings(db) as any;
-      const out = await callAnthropic({
-        model: settings.assistant_model,
-        question:
-          'This is my computed monthly review. In 2-3 short sentences, interpret what changed and surface 2-3 things worth my attention. Do not invent numbers; only use what is given.\n\n' +
-          r.summary,
-        context: buildContext(db),
-        useWebSearch: false,
-      });
-      if (out.ok && out.text) summary = r.summary + '\n\n— Assistant —\n' + out.text;
-    }
-    const info = db.prepare('INSERT INTO reviews (date, summary) VALUES (?, ?)').run(r.date || new Date().toISOString().slice(0, 10), summary);
+    const info = db
+      .prepare('INSERT INTO reviews (date, summary) VALUES (?, ?)')
+      .run(r.date || new Date().toISOString().slice(0, 10), r.summary);
     res.json(db.prepare('SELECT * FROM reviews WHERE id=?').get(info.lastInsertRowid));
-  });
-
-  // ---- AI Assistant ----
-  app.get('/api/assistant/status', (_req, res) => {
-    const settings = getSettings(db) as any;
-    res.json({
-      hasKey: !!process.env.ANTHROPIC_API_KEY,
-      model: settings.assistant_model,
-      webSearch: !!settings.web_search_enabled,
-    });
-  });
-  app.get('/api/assistant/context', (_req, res) => res.json(buildContext(db)));
-  app.get('/api/assistant/log', (_req, res) =>
-    res.json(db.prepare('SELECT * FROM assistant_log ORDER BY ts DESC LIMIT 100').all()),
-  );
-  app.post('/api/assistant/chat', async (req, res) => {
-    const { question, useWebSearch } = req.body || {};
-    if (!question) return res.status(400).json({ error: 'question required' });
-    const settings = getSettings(db) as any;
-    const context = buildContext(db);
-    const result = await callAnthropic({
-      model: settings.assistant_model,
-      question,
-      context,
-      useWebSearch: useWebSearch ?? !!settings.web_search_enabled,
-    });
-    if (result.ok) {
-      db.prepare('INSERT INTO assistant_log (question, answer, used_web_search) VALUES (?,?,?)').run(
-        question,
-        result.text,
-        result.usedWebSearch ? 1 : 0,
-      );
-    }
-    res.json(result);
   });
 
   return app;

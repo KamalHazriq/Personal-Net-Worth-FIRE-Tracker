@@ -16,7 +16,6 @@ const Fire = lazy(() => import('./pages/Fire'));
 const Playbook = lazy(() => import('./pages/Playbook'));
 const Goals = lazy(() => import('./pages/Goals'));
 const Studio = lazy(() => import('./pages/Studio'));
-const Assistant = lazy(() => import('./pages/Assistant'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const Recurring = lazy(() => import('./pages/Recurring'));
 
@@ -34,7 +33,6 @@ function AppRoutes() {
           <Route path="/goals" element={<Goals />} />
           <Route path="/playbook" element={<Playbook />} />
           <Route path="/studio" element={<Studio />} />
-          <Route path="/assistant" element={<Assistant />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/recurring" element={<Recurring />} />
         </Routes>

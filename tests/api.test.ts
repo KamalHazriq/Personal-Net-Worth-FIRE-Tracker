@@ -4,7 +4,6 @@ import { once } from 'node:events';
 import Database from 'better-sqlite3';
 import { initSchema, clearData } from '../server/src/db.ts';
 import { revokeAllTokens } from '../server/src/lib/auth.ts';
-import { webSearchTool } from '../server/src/lib/assistant.ts';
 import { createApp } from '../server/src/app.ts';
 
 // Exercises the real Express routes against a throwaway in-memory database —
@@ -241,22 +240,6 @@ test('GET /api/zakat nets liabilities and EPF out of zakatable wealth', async ()
   const above = await api('/api/zakat');
   assert.equal(above.body.zakatable_wealth, 3800);
   assert.equal(above.body.zakat_due, 95); // 3800 * 2.5%
-});
-
-// --------------------------------------------------------- assistant tools --
-
-test('web search picks the tool variant the chosen model actually supports', async () => {
-  // Dynamic filtering only exists on Opus 4.6+ / Sonnet 4.6+; sending it to
-  // Haiku is rejected, which would break web search for that model silently.
-  for (const model of ['claude-opus-5', 'claude-sonnet-5', 'claude-opus-4-8', 'claude-sonnet-4-6']) {
-    assert.equal(webSearchTool(model).type, 'web_search_20260209', `${model} should use dynamic filtering`);
-  }
-  assert.equal(webSearchTool('claude-haiku-4-5').type, 'web_search_20250305');
-  // An unrecognised/older id must degrade to the basic variant, not the new one
-  assert.equal(webSearchTool('claude-3-haiku-20240307').type, 'web_search_20250305');
-
-  assert.equal(webSearchTool('claude-opus-5').name, 'web_search');
-  assert.equal(webSearchTool('claude-opus-5').max_uses, 5);
 });
 
 // -------------------------------------------------------------- auth gate --

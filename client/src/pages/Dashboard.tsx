@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, useDataRefresh } from '../lib/api';
-import { rm, pct, signedRm, monthLabel } from '../lib/format';
+import { rm, pct, pctOf, signedRm, monthLabel } from '../lib/format';
 import { Card, CardHeader, Stat, Badge, Toggle, PageSkeleton, PageHeader, cn } from '../components/ui';
 import { X, LayoutDashboard } from 'lucide-react';
 import {
@@ -106,7 +106,7 @@ export default function Dashboard() {
       />
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={cn('grid grid-cols-2 gap-4', d.liability > 0 ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
         <Stat
           label="Net Worth"
           value={rm(d.netWorth)}
@@ -135,6 +135,27 @@ export default function Dashboard() {
           </div>
         </Stat>
 
+        {d.liability > 0 && (
+          <Stat
+            label="Debt"
+            value={rm(d.liability)}
+            tone="loss"
+            sub={
+              <span>
+                <span className={d.momLiability <= 0 ? 'text-gain' : 'text-loss'}>
+                  {signedRm(d.momLiability)} MoM
+                </span>
+                {' · '}
+                {pctOf(d.liability, d.bank + d.investment)} of assets
+              </span>
+            }
+          >
+            <div className="-mb-1 mt-1">
+              <Sparkline data={d.series.map((s: any) => ({ ...s, netWorth: s.liability }))} color="#c0392b" />
+            </div>
+          </Stat>
+        )}
+
         <Stat
           label="Invested Capital → Value"
           value={rm(inv?.totalValue)}
@@ -145,6 +166,11 @@ export default function Dashboard() {
               <Badge tone={inv?.totalPL >= 0 ? 'gain' : 'loss'}>
                 {signedRm(inv?.totalPL)} ({pct(inv?.plPct)})
               </Badge>
+              {inv?.asOf && (
+                <span className="block text-[10px] text-muted mt-0.5">
+                  P/L sheet as of {monthLabel(inv.asOf)} — not the account balances above
+                </span>
+              )}
             </span>
           }
         />
@@ -152,7 +178,7 @@ export default function Dashboard() {
         <Stat
           label="Avg Monthly Growth"
           value={rm(d.avgMonthlyGrowth)}
-          sub={`Avg invested ${rm(d.avgMonthlyInvested)}/mo`}
+          sub={`Own money invested ${rm(d.avgMonthlyInvested)}/mo${d.liability > 0 ? ' (net of borrowing)' : ''}`}
         />
       </div>
 

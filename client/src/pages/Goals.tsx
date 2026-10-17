@@ -118,7 +118,7 @@ export default function Goals() {
       <Card>
         <CardHeader
           title="Monthly review journal"
-          subtitle="A dated summary of what changed; interpreted by the assistant if a key is set"
+          subtitle="A dated summary of what changed, computed from your own numbers"
           action={<Button onClick={runReview} disabled={running}>{running ? <Loader2 size={14} className="animate-spin" /> : <CalendarCheck size={14} />} Run review</Button>}
         />
         <div className="p-4 space-y-3">

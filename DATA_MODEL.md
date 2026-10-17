@@ -125,7 +125,7 @@ Currency, Today's Turnover, Today's Purchase@Avg Price, Today's Sales@Avg Price`
 
 ```
 settings              base_currency, usd_myr_rate, current_age, target_retire_age,
-                      epf_unlock_age, fire_target_monthly_income, swr, assistant_model, web_search_enabled
+                      epf_unlock_age, fire_target_monthly_income, swr, nisab, passcode_hash
 
 accounts              id, name, category (Bank|Income|Liability|Investment),
                       subtype (Bank|MMF|HYSA|ASB|EPF|Wahed|Gold|Crypto|Stocks|Other|CreditCard|Cashback|Salary),
@@ -146,7 +146,6 @@ scenarios             id, name, params_json
 playbook_rules        id, title, body, sort_order
 goals                 id, label, target_json
 reviews               id, date, summary
-assistant_log         id, ts, question, answer, used_web_search
 ```
 
 ### Derived in code (never stored)

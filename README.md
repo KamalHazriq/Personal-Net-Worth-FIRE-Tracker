@@ -1,8 +1,8 @@
 # Personal Net Worth & FIRE Tracker
 
 A local-first web app that replaces my `Net Worth.xlsx` workbook: an Excel-like tracker, a
-visual dashboard, an investments/holdings breakdown, and a FIRE simulation engine — plus an
-optional AI "My Finances" assistant. Base currency **MYR (RM)**. Everything is
+visual dashboard, an investments/holdings breakdown, and a FIRE simulation engine.
+Base currency **MYR (RM)**. Everything is
 **Shariah-neutral** (no interest-based products are ever suggested). No cloud, no login —
 your data lives in a local SQLite file on your machine.
 
@@ -33,7 +33,6 @@ Add your own (everything stays local on your machine):
 2. **Holdings page → “Import CSV”** to drop in a MooMoo positions export (or paste it). Tag holdings
    as ETF/Individual once and it sticks across imports.
 3. **Settings** to set your USD/MYR rate, age, target retirement age, SWR and FIRE target income.
-4. **(Optional) AI Assistant** — see below; add an API key to enable it.
 
 > **Bulk import from Excel:** the bundled importer in `server/src/import/` is tailored to *one
 > specific* workbook layout (the author's `Net Worth.xlsx`). A different spreadsheet won't import
@@ -52,12 +51,11 @@ Add your own (everything stays local on your machine):
 | **Investments** | Per-platform P/L (Capital / Profit-Loss / Balance / P/L%), aggregate P/L%, P/L%-per-platform chart, and a per-coin crypto breakdown. |
 | **Holdings** | Import your MooMoo positions CSV (drag-drop or paste, appended by date), editable positions table with MYR conversion, ETF/Individual + sector tagging that persists, allocation donut (by holding / class / sector), ETF-vs-Individual over time, and a "push latest total into Net Worth" button. |
 | **FIRE** | Compounding projection of total vs **accessible (non-EPF)** money, FIRE number, the age you can retire, RM5k/10k/15k income cases, return sensitivity (10/12/15%), a reverse "required contribution" solver, and saveable scenario comparison. |
-| **Goals** | Track goals (net-worth target, emergency fund, holding %, contribution, retire-by-age) with progress bars computed locally; single-stock **concentration alerts**; a **Zakat calculator** (nisab-aware, computed from your real bank/investment/liability balances); and a dated **monthly-review journal** (computed summary, optionally interpreted by the assistant). |
+| **Goals** | Track goals (net-worth target, emergency fund, holding %, contribution, retire-by-age) with progress bars computed locally; single-stock **concentration alerts**; a **Zakat calculator** (nisab-aware, computed from your real bank/investment/liability balances); and a dated **monthly-review journal** computed from your own numbers. |
 | **Recurring** | Track recurring bills, subscriptions and income (monthly/yearly), with a running total of monthly outflow. |
 | **Playbook** | Your own rules (e.g. the "When markets drop" checklist) as editable cards. |
 | **Studio** | Generate 1080×1080 social cards (number/donut/trend styles) from your live numbers — theme presets, RM-vs-%-only toggle, PNG download or clipboard copy. Your handle & theme stay in `localStorage` only, never in the repo. |
-| **Assistant** | Optional AI companion that reasons over your live numbers (see below). |
-| **Settings** | USD/MYR rate, ages, SWR, target income, assistant model/web-search, appearance (Classic/New UI/New UI v3), and **export** to .xlsx / .csv / .json. |
+| **Settings** | USD/MYR rate, ages, SWR, target income, zakat nisab, appearance (Classic/New UI/New UI v3), local passcode, and **export** to .xlsx / .csv / .json. |
 
 ---
 
@@ -81,32 +79,6 @@ On the **Holdings** page click **Import CSV**, then drag-drop or paste a `Positi
 export. Each import is stored as a dated snapshot (history is kept). Tag each symbol as
 ETF/Individual and add a sector once — the tags persist across future imports. Use
 **Push to Net Worth** to copy the latest MYR total into the current month's MooMoo cell.
-
----
-
-## AI Assistant (optional)
-
-The Assistant works entirely through the **local backend** — your API key is never exposed
-to the browser. The rest of the app works fully offline without it.
-
-1. Copy `.env.example` to `.env` in this folder.
-2. Add your key: `ANTHROPIC_API_KEY=sk-ant-...`
-3. Restart (`npm run dev`). The Settings page will show "API key detected".
-
-Open it from the floating **My Finances** button (every page) or the **Assistant** page. On
-each question it auto-attaches a compact JSON snapshot of your real data (net worth with/without
-EPF, allocation, MooMoo positions + tags, FIRE settings, playbook). Guardrails are enforced in
-both the system prompt and the UI:
-
-- It **never** gives a Shariah verdict from memory — it points you to a screener (Zoya / Musaffa
-  / Islamicly) and, with web search on, looks it up and cites the source.
-- It **never** presents prices/returns from training data as current (uses web search or labels
-  them stale).
-- Any buy/sell discussion shows a checklist you tick: **price verified** / **Shariah verified**.
-- It frames everything as analysis & trade-offs, flags professional-advice questions (leverage,
-  tax, EPF), and never executes anything.
-
-Change the model or toggle web search on the **Settings** page. Every Q&A is logged locally.
 
 ---
 
@@ -152,7 +124,7 @@ npm run test:local   # optional: ties the importer out against your own workbook
 │      ├─ db.ts          schema + connection
 │      ├─ seed.ts        one-time importer (xlsx + csv → SQLite)
 │      ├─ import/        workbook & positions parsers (SheetJS)
-│      └─ lib/           queries, FIRE seed, assistant, exporter
+│      └─ lib/           queries, FIRE seed, exporter
 ├─ client/           React + Vite + TypeScript + Tailwind + Recharts (:5173, proxies /api)
 ├─ Net Worth.xlsx    source workbook (seeded on first run)
 ├─ Positions_*.csv   MooMoo export (seeded on first run)

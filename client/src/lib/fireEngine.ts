@@ -10,6 +10,25 @@ export interface FireAccount {
   excluded?: boolean; // toggle off for simulation
 }
 
+/**
+ * A debt carried alongside the portfolio. Borrowed money inflates the asset
+ * side (e.g. ASB financing raises the ASB balance by the loan amount), so the
+ * projection has to carry the obligation too or it compounds money you owe.
+ *
+ * With `monthlyPayment` and `annualRate` left at 0 the balance simply stays
+ * flat — a deliberately neutral default, since guessing someone's loan terms
+ * would be worse than showing the debt as unchanged until they enter them.
+ */
+export interface FireLiability {
+  id: number;
+  name: string;
+  subtype: string;
+  startBalance: number;   // outstanding today
+  monthlyPayment: number; // total instalment (profit + principal)
+  annualRate: number;     // financing rate, 0.0405 = 4.05%
+  excluded?: boolean;
+}
+
 export interface FireInputs {
   currentAge: number;
   targetRetireAge: number;
@@ -20,13 +39,16 @@ export interface FireInputs {
   cashStart: number;
   cashReturn: number;
   accounts: FireAccount[];
+  liabilities?: FireLiability[];
 }
 
 export interface YearPoint {
   age: number;
-  total: number;
-  accessible: number;
+  total: number;       // net of debt
+  accessible: number;  // net of debt, excluding EPF
   epf: number;
+  debt: number;        // outstanding at this point
+  grossTotal: number;  // before netting debt off
 }
 
 export interface FireResult {
@@ -38,6 +60,8 @@ export interface FireResult {
   finalEpf: number;
   atTarget: YearPoint | null;
   monthlyIncomeAtTarget: number;
+  startDebt: number;
+  debtClearedAge: number | null; // null if still outstanding at the horizon
 }
 
 const monthlyRate = (annual: number) => Math.pow(1 + annual, 1 / 12) - 1;
@@ -52,16 +76,31 @@ export function project(inp: FireInputs): FireResult {
   const rates = inp.accounts.map((a) => monthlyRate(a.annualReturn));
   let cash = inp.cashStart;
   const cashM = monthlyRate(inp.cashReturn);
-  const points: YearPoint[] = [];
 
+  const debts = (inp.liabilities ?? []).filter((l) => !l.excluded);
+  const debtBal = debts.map((l) => l.startBalance);
+  const debtRates = debts.map((l) => monthlyRate(l.annualRate));
+  const startDebt = debtBal.reduce((a, b) => a + b, 0);
+  let debtClearedAge: number | null = startDebt === 0 ? inp.currentAge : null;
+
+  const points: YearPoint[] = [];
   const record = (m: number) => {
-    let total = cash;
+    let gross = cash;
     let epf = 0;
     inp.accounts.forEach((a, i) => {
-      total += balances[i];
+      gross += balances[i];
       if (a.is_epf) epf += balances[i];
     });
-    points.push({ age: Math.round(inp.currentAge + m / 12), total, accessible: total - epf, epf });
+    const debt = debtBal.reduce((a, b) => a + b, 0);
+    const total = gross - debt;
+    points.push({
+      age: Math.round(inp.currentAge + m / 12),
+      total,
+      accessible: total - epf,
+      epf,
+      debt,
+      grossTotal: gross,
+    });
   };
 
   record(0);
@@ -74,6 +113,21 @@ export function project(inp: FireInputs): FireResult {
       const rate = isExcluded ? 0 : rates[i];
       balances[i] = balances[i] * (1 + rate) + contrib;
     });
+    // Amortise each debt: accrue the financing charge, then apply the instalment.
+    // A payment that never exceeds the charge leaves the balance standing, which
+    // is the honest outcome rather than a hidden payoff.
+    //
+    // With no instalment entered we carry the balance FLAT rather than accruing.
+    // Compounding an unpaid loan for decades would project a debt nobody is
+    // actually letting run, so "terms not entered yet" shows as unchanged.
+    debts.forEach((_, i) => {
+      if (debtBal[i] <= 0) return;
+      if (debts[i].monthlyPayment <= 0) return;
+      debtBal[i] = Math.max(0, debtBal[i] * (1 + debtRates[i]) - debts[i].monthlyPayment);
+    });
+    if (debtClearedAge === null && debtBal.every((b) => b <= 0)) {
+      debtClearedAge = Math.round(inp.currentAge + m / 12);
+    }
     if (m % 12 === 0) record(m);
   }
 
@@ -91,6 +145,8 @@ export function project(inp: FireInputs): FireResult {
     finalEpf: last.epf,
     atTarget,
     monthlyIncomeAtTarget: atTarget ? (atTarget.accessible * inp.swr) / 12 : 0,
+    startDebt,
+    debtClearedAge,
   };
 }
 

@@ -12,8 +12,6 @@ export interface Settings {
   epf_unlock_age: number;
   fire_target_monthly_income: number;
   swr: number;
-  assistant_model: string;
-  web_search_enabled: number;
   passcode_hash?: string | null;
 }
 
@@ -29,7 +27,7 @@ export type AccountCategory = 'Bank' | 'Income' | 'Liability' | 'Investment';
 export type AccountSubtype =
   | 'Bank' | 'MMF' | 'HYSA' | 'ASB' | 'EPF' | 'Wahed'
   | 'Gold' | 'Crypto' | 'Stocks' | 'Other'
-  | 'CreditCard' | 'Cashback' | 'Salary';
+  | 'CreditCard' | 'Loan' | 'Cashback' | 'Salary' | 'SideIncome';
 
 export interface Account {
   id: number;
@@ -135,14 +133,6 @@ export interface Review {
   summary: string;
 }
 
-export interface AssistantLogEntry {
-  id: number;
-  ts: string;
-  question: string;
-  answer: string | null;
-  used_web_search: number;
-}
-
 // ── API Response Helpers ──
 
 export interface ApiOk {
@@ -161,10 +151,4 @@ export interface AuthStatus {
 export interface AuthLoginResponse {
   ok: true;
   token: string;
-}
-
-export interface AssistantStatus {
-  hasKey: boolean;
-  model: string;
-  webSearch: boolean;
 }

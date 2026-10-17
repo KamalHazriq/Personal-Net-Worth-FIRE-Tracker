@@ -46,11 +46,11 @@ Add your own (everything stays local on your machine):
 
 | Page | What it does |
 |---|---|
-| **Dashboard** | KPI cards (net worth, net worth excl. EPF, invested-capital P/L, avg growth), net-worth line (with/without EPF toggle), stacked area by category, allocation donut, monthly-inflow bars, liquid-vs-locked gauge. |
-| **Accounts** | Excel-like editable grid grouped by Bank / Income / Liabilities / Investments, with live subtotals, Net Worth, Net Worth w/o EPF and MoM deltas. Inline cell editing, add/rename/delete accounts, year tabs. |
+| **Dashboard** | KPI cards (net worth, net worth excl. EPF, **debt**, invested-capital P/L, avg growth), net-worth line (with/without EPF toggle), stacked area by category, allocation donut with a **gross-exposure / net-of-debt toggle**, monthly-inflow bars, liquid-vs-locked gauge. |
+| **Accounts** | Excel-like editable grid grouped by Bank / Income / Liabilities / Investments, with live subtotals, Net Worth, Net Worth w/o EPF and MoM deltas. Inline cell editing, add/rename/delete accounts, year tabs. A debt can record **which asset it funded**. |
 | **Investments** | Per-platform P/L (Capital / Profit-Loss / Balance / P/L%), aggregate P/L%, P/L%-per-platform chart, and a per-coin crypto breakdown. |
 | **Holdings** | Import your MooMoo positions CSV (drag-drop or paste, appended by date), editable positions table with MYR conversion, ETF/Individual + sector tagging that persists, allocation donut (by holding / class / sector), ETF-vs-Individual over time, and a "push latest total into Net Worth" button. |
-| **FIRE** | Compounding projection of total vs **accessible (non-EPF)** money, FIRE number, the age you can retire, RM5k/10k/15k income cases, return sensitivity (10/12/15%), a reverse "required contribution" solver, and saveable scenario comparison. |
+| **FIRE** | Compounding projection of total vs **accessible (non-EPF)** money, **net of debt**, FIRE number, the age you can retire, RM5k/10k/15k income cases, return sensitivity (10/12/15%), a reverse "required contribution" solver, and saveable scenario comparison. A **Debts** card amortises each borrowing from its instalment and rate. |
 | **Goals** | Track goals (net-worth target, emergency fund, holding %, contribution, retire-by-age) with progress bars computed locally; single-stock **concentration alerts**; a **Zakat calculator** (nisab-aware, computed from your real bank/investment/liability balances); and a dated **monthly-review journal** computed from your own numbers. |
 | **Recurring** | Track recurring bills, subscriptions and income (monthly/yearly), with a running total of monthly outflow. |
 | **Playbook** | Your own rules (e.g. the "When markets drop" checklist) as editable cards. |
@@ -79,6 +79,30 @@ On the **Holdings** page click **Import CSV**, then drag-drop or paste a `Positi
 export. Each import is stored as a dated snapshot (history is kept). Tag each symbol as
 ETF/Individual and add a sector once — the tags persist across future imports. Use
 **Push to Net Worth** to copy the latest MYR total into the current month's MooMoo cell.
+
+---
+
+## Borrowing to invest
+
+Financing an asset (ASB financing, for example) raises that asset's balance by
+the loan without raising what you own, so the app keeps the two apart:
+
+- **Net worth** has always netted debt off. The **dashboard** now also shows a
+  Debt card, and "own money invested per month" is measured **net of borrowing**
+  — counted gross, the month a loan lands reads as a six-figure inflow.
+- **Allocation** has a *Gross exposure* / *Net of debt* toggle. Gross is what
+  moves when markets move; net is what you would keep after settling. Tag the
+  debt with the asset it funded (Accounts → edit the debt) and it is subtracted
+  from that asset rather than from cash.
+- **FIRE** subtracts the outstanding balance from the projection and amortises
+  it: enter the instalment and rate on the Debts card and it reports whether the
+  debt ever clears. Left at zero the balance is carried flat rather than
+  compounded, and the card shows the average monthly movement from your own
+  snapshots as a sanity check against the instalment you enter.
+- **Zakat** lets you choose whether long-term financing is deductible in full or
+  only the portion due now (Settings). Both figures are shown side by side on
+  the Goals page. That treatment is a fiqh question — the app reports both and
+  does not rule on it.
 
 ---
 

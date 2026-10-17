@@ -14,6 +14,7 @@ import {
 import Welcome from './Welcome';
 
 export default function Dashboard() {
+  const [allocNet, setAllocNet] = useState(false);
   const [d, setD] = useState<any>(null);
   const [alloc, setAlloc] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -213,10 +214,41 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Allocation donut */}
+        {/* Allocation donut — gross shows exposure, net shows equity. With a
+            financed asset the two differ a lot, so both are offered. */}
         <Card>
-          <CardHeader title="Allocation" subtitle={alloc ? `Latest · total ${rm(alloc.total)}` : ''} />
-          <div className="p-2">{alloc && <AllocationDonut items={alloc.items} />}</div>
+          <CardHeader
+            title="Allocation"
+            subtitle={
+              alloc
+                ? allocNet
+                  ? `Net of debt · your equity ${rm(alloc.netTotal)}`
+                  : `Gross exposure · assets ${rm(alloc.total)}`
+                : ''
+            }
+            action={
+              alloc?.totalDebt > 0 ? (
+                <Toggle
+                  options={[
+                    { value: 'gross', label: 'Gross' },
+                    { value: 'net', label: 'Net of debt' },
+                  ]}
+                  value={allocNet ? 'net' : 'gross'}
+                  onChange={(v) => setAllocNet(v === 'net')}
+                />
+              ) : undefined
+            }
+          />
+          <div className="p-2">
+            {alloc && <AllocationDonut items={allocNet ? alloc.netItems : alloc.items} />}
+          </div>
+          {alloc?.totalDebt > 0 && (
+            <p className="px-4 pb-3 text-xs text-muted">
+              {allocNet
+                ? `${rm(alloc.totalDebt)} of debt subtracted from the asset it financed — this is what you'd keep after settling it.`
+                : `Gross of ${rm(alloc.totalDebt)} debt — this is what moves when markets move, not what you own.`}
+            </p>
+          )}
         </Card>
       </div>
 

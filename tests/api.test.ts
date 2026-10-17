@@ -204,6 +204,62 @@ test('PATCH /api/positions/:id 404s for a missing position', async () => {
   assert.equal((await api('/api/positions/999999', { method: 'PATCH', body: { quantity: 1 } })).status, 404);
 });
 
+// -------------------------------------------------------------- allocation --
+
+test('allocation reports gross exposure and equity net of a financed debt', async () => {
+  const bank = addAccount('Bank', 'Bank');
+  const asb = addAccount('ASB', 'Investment', 'ASB');
+  const loan = addAccount('ASB financing', 'Liability', 'Loan');
+  const snap = db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)');
+  snap.run(bank, '2026-01-31', 10000);
+  snap.run(asb, '2026-01-31', 100000);
+  snap.run(loan, '2026-01-31', 80000);
+  // point the borrowing at the asset it funded
+  assert.equal((await api(`/api/accounts/${loan}`, { method: 'PATCH', body: { financed_account_id: asb } })).status, 200);
+
+  const r = await api('/api/allocation');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.total, 110000);      // gross exposure
+  assert.equal(r.body.netTotal, 30000);    // equity = net worth
+  assert.equal(r.body.totalDebt, 80000);
+
+  const gross = Object.fromEntries(r.body.items.map((i: any) => [i.label, i.value]));
+  const net = Object.fromEntries(r.body.netItems.map((i: any) => [i.label, i.value]));
+  assert.equal(gross.ASB, 100000);
+  assert.equal(net.ASB, 20000);              // the loan came off ASB, not cash
+  assert.equal(net['Cash/Bank'], 10000);
+});
+
+test('a debt that funded nothing in particular is netted off cash', async () => {
+  const bank = addAccount('Bank', 'Bank');
+  const asb = addAccount('ASB', 'Investment', 'ASB');
+  const card = addAccount('Card', 'Liability', 'CreditCard');
+  const snap = db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)');
+  snap.run(bank, '2026-01-31', 10000);
+  snap.run(asb, '2026-01-31', 100000);
+  snap.run(card, '2026-01-31', 1500);
+
+  const r = await api('/api/allocation');
+  const net = Object.fromEntries(r.body.netItems.map((i: any) => [i.label, i.value]));
+  assert.equal(net['Cash/Bank'], 8500); // settled from cash
+  assert.equal(net.ASB, 100000);        // asset untouched
+});
+
+test('financed_account_id must point at an Investment account', async () => {
+  const bank = addAccount('Bank', 'Bank');
+  const loan = addAccount('Loan', 'Liability', 'Loan');
+
+  const atBank = await api(`/api/accounts/${loan}`, { method: 'PATCH', body: { financed_account_id: bank } });
+  assert.equal(atBank.status, 400);
+  assert.match(atBank.body.error, /must reference an Investment account/);
+
+  const missing = await api(`/api/accounts/${loan}`, { method: 'PATCH', body: { financed_account_id: 999999 } });
+  assert.equal(missing.status, 400);
+
+  // clearing it is allowed
+  assert.equal((await api(`/api/accounts/${loan}`, { method: 'PATCH', body: { financed_account_id: null } })).status, 200);
+});
+
 // ------------------------------------------------------------------ export --
 
 test('GET /api/export/csv escapes quotes and neutralises formula prefixes', async () => {

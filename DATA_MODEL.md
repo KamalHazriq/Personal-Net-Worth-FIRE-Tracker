@@ -125,12 +125,15 @@ Currency, Today's Turnover, Today's Purchase@Avg Price, Today's Sales@Avg Price`
 
 ```
 settings              base_currency, usd_myr_rate, current_age, target_retire_age,
-                      epf_unlock_age, fire_target_monthly_income, swr, nisab, passcode_hash
+                      epf_unlock_age, fire_target_monthly_income, swr, nisab, zakat_debt_basis, passcode_hash
 
 accounts              id, name, category (Bank|Income|Liability|Investment),
                       subtype (Bank|MMF|HYSA|ASB|EPF|Wahed|Gold|Crypto|Stocks|Other|CreditCard|Cashback|Salary),
                       currency, is_epf, is_liquid, shariah_ok, sort_order, active
                       UNIQUE(name, category)
+
+(accounts also carries financed_account_id -> accounts.id, set on a debt to
+ record which investment it funded; NULL for everything else)
 
 snapshots             account_id, date (month-end), value           PK(account_id, date)
 investments           platform, month, capital, profit_loss, balance  PK(platform, month)

@@ -203,7 +203,15 @@ const NUMERIC_SETTINGS = new Set([
     const id = Number(req.params.id);
     if ('category' in req.body && !ACCOUNT_CATEGORIES.includes(req.body.category))
       return res.status(400).json({ error: `category must be one of ${ACCOUNT_CATEGORIES.join(', ')}` });
-    const fields = ['name', 'category', 'subtype', 'is_epf', 'is_liquid', 'currency', 'sort_order'];
+    // A debt may name the asset it funded, but only a real investment account.
+    if (req.body.financed_account_id != null && req.body.financed_account_id !== '') {
+      const target = db
+        .prepare(`SELECT id FROM accounts WHERE id=? AND category='Investment'`)
+        .get(Number(req.body.financed_account_id));
+      if (!target)
+        return res.status(400).json({ error: 'financed_account_id must reference an Investment account' });
+    }
+    const fields = ['name', 'category', 'subtype', 'is_epf', 'is_liquid', 'currency', 'sort_order', 'financed_account_id'];
     const sets: string[] = [];
     const vals: any[] = [];
     for (const f of fields) {

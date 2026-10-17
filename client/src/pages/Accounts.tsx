@@ -22,6 +22,8 @@ type Acct = {
   is_epf: number;
   is_liquid: number;
   currency: string;
+  /** For a debt: the investment account this borrowing funded, if any. */
+  financed_account_id: number | null;
   values: Record<string, number>;
 };
 type Group = { category: string; title: string; accounts: Acct[] };
@@ -267,6 +269,7 @@ export default function Accounts() {
         <AccountEditor
           acct={editAcct.acct}
           category={editAcct.category}
+          investmentAccounts={grid.groups.find((g) => g.category === 'Investment')?.accounts ?? []}
           onClose={() => setEditAcct(null)}
           onSaved={(msg) => {
             setEditAcct(null);
@@ -290,7 +293,7 @@ export default function Accounts() {
                     ...g,
                     groups: g.groups.map((grp) =>
                       grp.category === a.category
-                        ? { ...grp, accounts: [...grp.accounts, { ...a, values: {} }] }
+                        ? { ...grp, accounts: [...grp.accounts, { ...a, financed_account_id: null, values: {} }] }
                         : grp,
                     ),
                   }
@@ -480,10 +483,13 @@ function EditableCell({
 function AccountEditor({
   acct,
   category,
+  investmentAccounts,
   onClose,
   onSaved,
 }: {
   acct: Acct;
+  /** Offered as the funded asset when editing a debt. */
+  investmentAccounts: Acct[];
   /** The group the account is rendered under — the server's own grouping, so the
    *  subtype list is always the right one (don't re-derive it from the subtype). */
   category: string;
@@ -494,12 +500,19 @@ function AccountEditor({
   const [subtype, setSubtype] = useState(acct.subtype);
   const [isEpf, setIsEpf] = useState(!!acct.is_epf);
   const [isLiquid, setIsLiquid] = useState(!!acct.is_liquid);
+  const [financed, setFinanced] = useState<string>(acct.financed_account_id ? String(acct.financed_account_id) : '');
   const confirmDialog = useConfirm();
 
   const save = async () => {
     await api(`/accounts/${acct.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ name, subtype, is_epf: isEpf, is_liquid: isLiquid }),
+      body: JSON.stringify({
+        name,
+        subtype,
+        is_epf: isEpf,
+        is_liquid: isLiquid,
+        ...(category === 'Liability' ? { financed_account_id: financed === '' ? null : Number(financed) } : {}),
+      }),
     });
     onSaved('Account updated');
   };
@@ -527,6 +540,23 @@ function AccountEditor({
           ))}
         </SelectInput>
       </Field>
+      {category === 'Liability' && (
+        <Field label="Funded which asset? (optional)">
+          <SelectInput value={financed} onChange={(e) => setFinanced(e.target.value)}>
+            <option value="">— nothing in particular —</option>
+            {investmentAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </SelectInput>
+          <p className="mt-1 text-[11px] text-muted">
+            Borrowing to buy an asset inflates that asset's balance. Naming it here lets the
+            dashboard show your equity allocation as well as your gross exposure.
+          </p>
+        </Field>
+      )}
+
       <div className="flex gap-4 mb-4 text-sm">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={isEpf} onChange={(e) => setIsEpf(e.target.checked)} /> EPF (locked)

@@ -183,6 +183,10 @@ const MIGRATIONS = [
   // liability in full) or 'short_term' (only debt due now, excluding long-term
   // financing). Defaults to 'all' so an existing figure doesn't change by itself.
   `ALTER TABLE settings ADD COLUMN zakat_debt_basis TEXT NOT NULL DEFAULT 'all'`,
+  // Which asset a borrowing funded, so the allocation view can show equity as
+  // well as exposure (an ASB financing inflates the ASB balance by the loan).
+  // Nullable and unenforced by design — most debts fund nothing in particular.
+  'ALTER TABLE accounts ADD COLUMN financed_account_id INTEGER',
 ];
 
 export function initSchema(db: Database.Database) {

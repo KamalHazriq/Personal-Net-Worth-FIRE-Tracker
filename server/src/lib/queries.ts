@@ -46,6 +46,7 @@ export function gridForYear(db: Database.Database, year: number) {
         is_epf: a.is_epf,
         is_liquid: a.is_liquid,
         currency: a.currency,
+        financed_account_id: a.financed_account_id ?? null,
         values: valMap.get(a.id) || {},
       })),
   }));
@@ -148,7 +149,48 @@ export function latestAllocation(db: Database.Database) {
   const items = Array.from(buckets.entries())
     .map(([label, value]) => ({ label, value: round(value), pct: round((value / total) * 100, 2) }))
     .sort((a, b) => b.value - a.value);
-  return { date: latest, total: round(total), items };
+
+  // Net-of-debt view. Borrowing inflates whichever asset it funded, so the gross
+  // donut describes exposure while this one describes equity. A debt that names
+  // the asset it financed is subtracted from that bucket; anything else (cards)
+  // comes off cash, which is where it will actually be settled from.
+  const debts = db
+    .prepare(
+      `SELECT a.id, a.subtype, a.financed_account_id, s.value,
+         (SELECT fa.subtype FROM accounts fa WHERE fa.id = a.financed_account_id) financedSubtype
+       FROM snapshots s JOIN accounts a ON a.id = s.account_id
+       WHERE s.date = ? AND a.category = 'Liability' AND s.value > 0`,
+    )
+    .all(latest) as any[];
+
+  const netBuckets = new Map(buckets);
+  let unattributed = 0;
+  for (const d of debts) {
+    const key = d.financedSubtype || null;
+    if (key && netBuckets.has(key)) netBuckets.set(key, (netBuckets.get(key) || 0) - d.value);
+    else unattributed += d.value;
+  }
+  if (unattributed) netBuckets.set('Cash/Bank', (netBuckets.get('Cash/Bank') || 0) - unattributed);
+
+  const netTotal = Array.from(netBuckets.values()).reduce((t, v) => t + v, 0);
+  const netItems = Array.from(netBuckets.entries())
+    .map(([label, value]) => ({
+      label,
+      value: round(value),
+      pct: netTotal > 0 ? round((value / netTotal) * 100, 2) : 0,
+    }))
+    .filter((i) => Math.abs(i.value) >= 0.005)
+    .sort((a, b) => b.value - a.value);
+
+  const totalDebt = debts.reduce((t, d) => t + d.value, 0);
+  return {
+    date: latest,
+    total: round(total),
+    items,
+    netTotal: round(netTotal),
+    netItems,
+    totalDebt: round(totalDebt),
+  };
 }
 
 /** Invested capital vs current value, using each platform's latest valid month. */

@@ -1,5 +1,10 @@
 // ── Shared type definitions for FIRE Tracker ──
-// Used by both server and client workspaces.
+//
+// NOTE: nothing imports this file yet — both workspaces still type most API
+// payloads as `any`. It is kept as the written description of the schema, which
+// means it can drift from server/src/db.ts without anything failing. If you
+// change the schema, change this too (or start importing it, which would make
+// the drift impossible).
 
 // ── Settings ──
 
@@ -12,6 +17,9 @@ export interface Settings {
   epf_unlock_age: number;
   fire_target_monthly_income: number;
   swr: number;
+  nisab: number;
+  /** Which debts are deducted from zakatable wealth. */
+  zakat_debt_basis: 'all' | 'short_term';
   passcode_hash?: string | null;
 }
 
@@ -40,6 +48,11 @@ export interface Account {
   shariah_ok: number;
   sort_order: number;
   active: number;
+  /**
+   * For a Liability: the Investment account this borrowing funded, if any.
+   * Lets the allocation view show equity as well as gross exposure.
+   */
+  financed_account_id: number | null;
 }
 
 export interface Snapshot {
@@ -97,11 +110,17 @@ export interface SymbolTag {
 
 // ── FIRE Planning ──
 
+/**
+ * Monthly cash flow and rate for an account. For an Investment this is the
+ * contribution and its expected return; for a Liability the same row stores the
+ * instalment and the financing rate (same shape, opposite sign).
+ */
 export interface Contribution {
   account_id: number;
   monthly_amount: number;
   annual_return_rate: number;
   annual_contribution_growth_rate: number;
+  excluded?: number;
 }
 
 export interface Scenario {

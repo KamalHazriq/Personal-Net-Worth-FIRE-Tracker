@@ -353,6 +353,53 @@ test('GET /api/zakat nets liabilities and EPF out of zakatable wealth', async ()
   assert.equal(above.body.zakat_due, 95); // 3800 * 2.5%
 });
 
+// ----------------------------------------------------------------- review --
+
+test('monthly review measures the invested pool net of borrowing, and says so', async () => {
+  const bank = addAccount('Bank', 'Bank');
+  const asb = addAccount('ASB', 'Investment', 'ASB');
+  const loan = addAccount('ASB financing', 'Liability', 'Loan');
+  const salary = addAccount('Net Salary', 'Income', 'Salary');
+  const snap = db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)');
+  // month 1
+  snap.run(bank, '2026-01-31', 1000);
+  snap.run(asb, '2026-01-31', 10000);
+  snap.run(salary, '2026-01-31', 4000);
+  // month 2: a 100k loan funds a 100k ASB purchase, plus 2k of real saving
+  snap.run(bank, '2026-02-28', 1000);
+  snap.run(asb, '2026-02-28', 112000);
+  snap.run(loan, '2026-02-28', 100000);
+  snap.run(salary, '2026-02-28', 4000);
+
+  const r = await api('/api/reviews', { method: 'POST' });
+  assert.equal(r.status, 200);
+  const summary: string = r.body.summary;
+
+  // The pool grew 102,000 gross but only 2,000 net of the borrowing.
+  assert.ok(summary.includes('RM 2,000'), `expected the net figure, got:\n${summary}`);
+  assert.ok(!summary.includes('RM 102,000'), 'the gross figure must not be reported');
+  // 2000/4000 = 50%, and it must not be called a savings rate.
+  assert.ok(summary.includes('(50%)'));
+  assert.ok(summary.includes('not a savings rate'));
+  // Debt gets its own line once it exists.
+  assert.ok(/Debt RM 100,000/.test(summary), `expected a debt line, got:\n${summary}`);
+});
+
+test('monthly review skips the income ratio when income is too small to divide by', async () => {
+  const asb = addAccount('ASB', 'Investment', 'ASB');
+  const cashback = addAccount('Net Salary', 'Income', 'Cashback');
+  const snap = db.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)');
+  snap.run(asb, '2026-01-31', 10000);
+  snap.run(cashback, '2026-01-31', 4);
+  snap.run(asb, '2026-02-28', 15000);
+  snap.run(cashback, '2026-02-28', 4); // RM4 of cashback, no salary
+
+  const summary: string = (await api('/api/reviews', { method: 'POST' })).body.summary;
+  // RM5,000 against RM4 would otherwise read as 125,000%.
+  assert.ok(summary.includes('income too small'), `got:\n${summary}`);
+  assert.ok(!/\d{4,}%/.test(summary), 'no absurd percentage may be reported');
+});
+
 // -------------------------------------------------------------- auth gate --
 
 test('with no passcode set the API is open', async () => {

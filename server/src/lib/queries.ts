@@ -375,7 +375,14 @@ export function monthlyReviewSummary(db: Database.Database) {
   // financing lands reads as a six-figure "inflow" and a savings rate in the
   // thousands of percent.
   const invested = last.investment - last.liability - (prev.investment - prev.liability);
-  const savingsRate = income > 0 ? (invested / income) * 100 : null;
+  // The change in the invested pool is contributions PLUS market movement, not a
+  // savings rate: a writedown month reads as negative "saving". A real savings
+  // rate needs actual contributions (the `capital` column on the Invest sheets),
+  // which balances cannot yield. So name it for what it is, and skip the ratio
+  // when income is too small to divide by — a month of only cashback produces a
+  // five-figure percentage.
+  const MIN_INCOME_FOR_RATIO = 100;
+  const growthVsIncome = income >= MIN_INCOME_FOR_RATIO ? (invested / income) * 100 : null;
   const alloc: any = latestAllocation(db);
   const drift = driftAlerts(db).alerts;
 
@@ -383,9 +390,9 @@ export function monthlyReviewSummary(db: Database.Database) {
     `Net worth ${fmtDelta(last.netWorth - prev.netWorth)} to ${fmtRm(last.netWorth)} (accessible ${fmtDelta(
       last.netWorthExEpf - prev.netWorthExEpf,
     )} to ${fmtRm(last.netWorthExEpf)}).`,
-    savingsRate != null
-      ? `Investment inflow ${fmtRm(invested)} on ${fmtRm(income)} income ≈ ${savingsRate.toFixed(0)}% savings rate.`
-      : `Investment inflow ${fmtRm(invested)}.`,
+    growthVsIncome != null
+      ? `Invested pool ${fmtDelta(invested)} against ${fmtRm(income)} income (${growthVsIncome.toFixed(0)}%) — contributions and market movement together, not a savings rate.`
+      : `Invested pool ${fmtDelta(invested)} (income too small this month to compare against).`,
     `Top allocation: ${(alloc.items || [])
       .slice(0, 3)
       .map((i: any) => `${i.label} ${i.pct.toFixed(0)}%`)
@@ -403,7 +410,7 @@ export function monthlyReviewSummary(db: Database.Database) {
       ).toFixed(0)}% of gross assets.`,
     );
   }
-  return { date: last.date, summary: lines.join('\n'), drift, savingsRate, income };
+  return { date: last.date, summary: lines.join('\n'), drift, growthVsIncome, income };
 }
 
 function fmtRm(n: number) {

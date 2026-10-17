@@ -46,11 +46,15 @@ export default function Dashboard() {
     return d.series.filter((s: any) => s.date >= range.from && s.date <= range.to);
   }, [d, range]);
 
+  // Net of borrowing. Plotted gross, the month a loan lands is a six-figure bar
+  // that flattens every real contribution month next to it.
   const inflow = useMemo(() => {
     if (!d?.series) return [];
     const out: { date: string; inflow: number }[] = [];
     for (let i = 1; i < d.series.length; i++) {
-      out.push({ date: d.series[i].date, inflow: d.series[i].investment - d.series[i - 1].investment });
+      const now = d.series[i].investment - d.series[i].liability;
+      const prev = d.series[i - 1].investment - d.series[i - 1].liability;
+      out.push({ date: d.series[i].date, inflow: now - prev });
     }
     return range ? out.filter((x) => x.date >= range.from && x.date <= range.to) : out;
   }, [d, range]);
@@ -208,7 +212,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Stacked area */}
         <Card className="lg:col-span-2">
-          <CardHeader title="Net Worth by category" subtitle="Stacked over time" />
+          <CardHeader
+            title="Assets by category"
+            subtitle={
+              d.liability > 0
+                ? `Stacked over time · gross of ${rm(d.liability)} debt, so the total runs above net worth`
+                : 'Stacked over time'
+            }
+          />
           <div className="p-2">
             <CategoryArea data={shownSeries} keys={catKeys} />
           </div>
@@ -255,7 +266,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Inflow bars */}
         <Card className="lg:col-span-2">
-          <CardHeader title="Monthly investment inflow" subtitle="Change in invested balance each month" />
+          <CardHeader
+            title="Monthly investment inflow"
+            subtitle={
+              d.liability > 0
+                ? 'Change in invested balance each month, net of borrowing'
+                : 'Change in invested balance each month'
+            }
+          />
           <div className="p-2">
             <InflowBars data={inflow} />
           </div>

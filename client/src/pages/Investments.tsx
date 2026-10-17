@@ -14,7 +14,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Info } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm, pct, monthLabel, signedRm } from '../lib/format';
 import { Card, CardHeader, Stat, Badge, cn, PageSkeleton, PageHeader } from '../components/ui';
@@ -38,8 +38,12 @@ export default function Investments() {
   useEffect(() => {
     loadInv();
   }, [year]);
+  const [latestSnapshot, setLatestSnapshot] = useState<string | null>(null);
   useEffect(() => {
     api('/crypto').then(setCrypto);
+    // The account grid is the live source; this page is fed by the separate
+    // Invest sheets, so compare the two and say if they've drifted apart.
+    api('/dashboard').then((d) => setLatestSnapshot(d?.latestDate ?? null));
   }, []);
   useDataRefresh(() => {
     loadInv();
@@ -59,6 +63,16 @@ export default function Investments() {
   const t = month ? inv.totals[month] : null;
   const yearTabs = inv.years.length ? inv.years : [year];
 
+  // Months between the newest P/L month on this page and the newest account
+  // snapshot. Anything over one month means the two have drifted apart.
+  const staleBy = (() => {
+    const plMonth = [...(inv.months ?? [])].sort().pop();
+    if (!plMonth || !latestSnapshot) return null;
+    const toIdx = (d: string) => Number(d.slice(0, 4)) * 12 + Number(d.slice(5, 7));
+    const months = toIdx(latestSnapshot) - toIdx(plMonth);
+    return months > 1 ? { plMonth, snapshotMonth: latestSnapshot, months } : null;
+  })();
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -66,6 +80,24 @@ export default function Investments() {
         title="Investments P/L"
         subtitle="Per-platform capital, profit/loss and returns · plus crypto breakdown"
       />
+
+      {/* This page needs capital-invested figures, which the account grid doesn't
+          carry — so it can silently fall behind the balances. Say so rather than
+          letting stale numbers read as current. */}
+      {staleBy && (
+        <Card className="p-3 text-xs flex gap-2 items-start border border-warn">
+          <Info size={14} className="text-warn mt-0.5 shrink-0" />
+          <span>
+            This page is fed by its own capital &amp; P/L figures, last filled in{' '}
+            <span className="text-text font-medium">{mLabel(staleBy.plMonth)}</span>. Your account
+            balances run to{' '}
+            <span className="text-text font-medium">{monthLabel(staleBy.snapshotMonth)}</span>, so
+            the P/L here is {staleBy.months} month{staleBy.months === 1 ? '' : 's'} behind and does
+            not reflect your current balances. Capital invested can't be derived from balances — add
+            the newer months to bring it up to date.
+          </span>
+        </Card>
+      )}
 
       <div className="flex gap-1">
         {yearTabs.map((y: number) => (

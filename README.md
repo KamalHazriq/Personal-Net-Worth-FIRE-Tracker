@@ -132,10 +132,31 @@ nothing but the schema, re-imports `Net Worth.xlsx` + the CSV).
 
 ---
 
+## Checking your data
+
+```bash
+npm run check
+```
+
+Balances are typed in by hand each month, and the damage from a slip isn't a
+crash — it's a decimal point in the wrong place quietly moving net worth. This
+reads the database (never writes) and reports anything that looks like a
+mistake: dates that aren't month-ends, missing months, and month-over-month
+jumps far outside an account's own usual movement — called out specifically when
+the jump is close to a factor of ten. It also notes accounts with no history at
+all and a `Loan` with no funded asset recorded. It exits non-zero only for the
+suspicious ones, so a clean month is a clean run.
+
+Genuine large moves (a lump sum, closing an account, drawing financing) show up
+as information, not warnings — the heuristic compares against each account's own
+typical movement rather than a fixed ringgit threshold.
+
+---
+
 ## Tests
 
 ```bash
-npm test         # unit suite on synthetic data: parser, dates, query logic, FIRE engine
+npm test         # unit suite on synthetic data: parser, dates, query logic, FIRE engine, API routes, data checks
 npm run test:local   # optional: ties the importer out against your own workbook (kept local, gitignored)
 ```
 

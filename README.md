@@ -113,9 +113,10 @@ the loan without raising what you own, so the app keeps the two apart:
 
 ## Local passcode (optional)
 
-The app runs on **localhost only** (`127.0.0.1`) — it is never reachable from other devices on your
-network. If you also want to stop anyone at your computer from opening it, set a passcode in
-**Settings → Security**:
+By default the app runs on **localhost only** (`127.0.0.1`) — nothing else on your network can
+reach it, so a passcode is optional. It stops becoming optional the moment you want it on your
+phone: see [Using it on your phone](#using-it-on-your-phone), which refuses to start without one.
+Set one in **Settings → Security**:
 
 - It's enforced by the **backend** — every API call needs a valid session token, so it can't be
   bypassed by hitting the API directly. The passcode is stored only as a salted **scrypt hash**.
@@ -124,6 +125,72 @@ network. If you also want to stop anyone at your computer from opening it, set a
   Your OS login remains the boundary for direct file access.
 
 You can change or remove the passcode anytime in Settings, or hit **Lock now** to lock immediately.
+A session lasts **14 days** by default (`SESSION_DAYS` in `.env`) and ends whenever the server
+restarts, so a phone you lose stops working rather than staying unlocked indefinitely.
+
+## Using it on your phone
+
+Over [Tailscale](https://tailscale.com), which is a private network between your own devices
+rather than an open port. Your laptop keeps the database; the phone is just a browser.
+
+**First, on both devices:** install Tailscale and sign in to the same account. Free for personal
+use. Nothing below works until the phone and laptop can see each other — check with
+`tailscale status` on the laptop.
+
+**Second, set a passcode** (Settings → Security). The server refuses to listen on anything but
+localhost without one, because an address your phone can reach is an address other things can
+try to reach too, and without a passcode every request gets answered.
+
+Then pick one of two ways.
+
+### Tailscale Serve (recommended)
+
+Tailscale terminates HTTPS for you and forwards to the app, which stays bound to `127.0.0.1`.
+The app never listens on a network interface at all — the only way in is through Tailscale's
+own tunnel.
+
+```bash
+npm run build && npm start
+```
+
+In a second terminal, once per machine:
+
+```bash
+tailscale serve --bg --https=443 8787
+```
+
+Then open `https://<your-machine>.<your-tailnet>.ts.net` on your phone. `tailscale status` prints
+the name. Requires **HTTPS certificates** enabled for your tailnet (admin console → **DNS** →
+*Enable HTTPS*, MagicDNS on); new tailnets have it on already. `tailscale serve --https=443 off`
+stops it.
+
+Worth the extra step for two reasons: the traffic is encrypted, and because it is real HTTPS the
+browser treats the page as a secure context — so **Add to Home Screen** gives you a proper
+offline-capable app rather than a bookmark.
+
+### Binding to the tailnet address directly
+
+No HTTPS, no second terminal:
+
+```bash
+npm run phone
+```
+
+That builds the client and starts the server on this machine's own tailnet address (an IPv4 in
+`100.64.0.0/10`), printing the URL to open. It refuses to start if Tailscale isn't up or no
+passcode is set.
+
+The trade-off: plain HTTP means the browser won't treat it as a secure context, so the service
+worker won't register and "Add to Home Screen" is only a shortcut. The passcode still protects
+the data, but the traffic itself isn't encrypted.
+
+### Either way
+
+- The whole app is served from the API server, so the phone needs **one** address — no Vite, no
+  second port. Run `npm run build` again after changing the client.
+- `SERVER_HOST=0.0.0.0` exists and is a bad idea: it puts the app on every network the laptop
+  joins, including public wifi, with no HTTPS. The server warns when you use it.
+- Nothing leaves your devices. There is no cloud component to any of this.
 
 ## Export & backup
 
@@ -161,7 +228,8 @@ typical movement rather than a fixed ringgit threshold.
 ## Tests
 
 ```bash
-npm test         # unit suite on synthetic data: parser, dates, query logic, FIRE engine, API routes, data checks
+npm test         # 96 tests on synthetic data: parser, dates, query logic, FIRE engine,
+                 # API routes, data checks, passcode/session handling, phone serving
 npm run test:local   # optional: ties the importer out against your own workbook (kept local, gitignored)
 ```
 
@@ -171,18 +239,25 @@ npm run test:local   # optional: ties the importer out against your own workbook
 /                    npm workspaces; `npm run dev` runs both via concurrently
 ├─ server/           Express + better-sqlite3 (API on :8787, SERVER_PORT to override)
 │   └─ src/
+│      ├─ index.ts       bootstrap: picks the address, gates on a passcode, binds
+│      ├─ app.ts         every route, built against any database (so tests can drive it)
 │      ├─ db.ts          schema + connection
 │      ├─ seed.ts        one-time importer (xlsx + csv → SQLite)
+│      ├─ check.ts       `npm run check` data-integrity pass
+│      ├─ phone.ts       `npm run phone` — start on the tailnet address
 │      ├─ import/        workbook & positions parsers (SheetJS)
-│      └─ lib/           queries, FIRE seed, exporter
+│      └─ lib/           queries, FIRE seed, exporter, passcode/sessions,
+│                        address resolution (net.ts), static client (serve.ts)
 ├─ client/           React + Vite + TypeScript + Tailwind + Recharts (:5173, proxies /api)
 ├─ Net Worth.xlsx    source workbook (seeded on first run)
 ├─ Positions_*.csv   MooMoo export (seeded on first run)
 └─ DATA_MODEL.md     parsed workbook structure + app schema
 ```
 
-Data is stored in `server/data.db` (gitignored). The frontend talks to the backend via a Vite
-proxy, so there's nothing to configure.
+Data is stored in `server/data.db` (gitignored). In development the frontend talks to the backend
+through a Vite proxy, so there's nothing to configure. In a production build the API server also
+serves `client/dist`, which is what makes [phone access](#using-it-on-your-phone) a single
+address.
 
 ---
 

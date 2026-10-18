@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Palette, Download, Copy, RefreshCw } from 'lucide-react';
+import { Palette, Download, Copy } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
-import { monthLabel, rm } from '../lib/format';
+import { rm } from '../lib/format';
 import { Card, CardHeader, Button, Field, TextInput, Toggle, PageSkeleton, PageHeader, cn } from '../components/ui';
 import { useToast } from '../components/Toast';
 
@@ -58,15 +58,12 @@ export default function Studio() {
   const [handle, setHandle] = useState(() => localStorage.getItem('studio_handle') || '@yourhandle');
   const [mode, setMode] = useState<'rm' | 'pct'>((localStorage.getItem('studio_mode') as any) || 'rm');
   const [title, setTitle] = useState('');
-  const [notes, setNotes] = useState(() => localStorage.getItem('studio_notes') || '');
-  const [settings, setSettings] = useState<any>(null);
   const toast = useToast();
 
   const load = () =>
-    Promise.all([api('/dashboard'), api('/allocation'), api('/settings')]).then(([d, a, st]) => {
+    Promise.all([api('/dashboard'), api('/allocation')]).then(([d, a]) => {
       setDash(d);
       setAlloc(a);
-      setSettings(st);
       setTitle((t) => t || monthFull(d.latestDate));
     });
   useEffect(() => {
@@ -83,14 +80,9 @@ export default function Studio() {
   useEffect(() => {
     localStorage.setItem('studio_mode', mode);
   }, [mode]);
-  useEffect(() => {
-    localStorage.setItem('studio_notes', notes);
-  }, [notes]);
 
   const data = useMemo(() => {
     if (!dash || !alloc) return null;
-    const series = dash.series.slice(-13); // last ~12 months + start point
-
     // per-asset breakdown with month-over-month change (from the series' byCategory)
     const s = dash.series;
     // Net of any borrowing. These cards get posted publicly next to a net-worth
@@ -98,20 +90,6 @@ export default function Studio() {
     // than the one you have — a financed asset would read as if you owned it
     // outright. Netting is also the more private option: the card simply shows
     // your equity, with no need to disclose the financing at all.
-    const cur: Record<string, number> = s[s.length - 1]?.byCategoryNet || s[s.length - 1]?.byCategory || {};
-    const prev: Record<string, number> =
-      s.length > 1 ? s[s.length - 2]?.byCategoryNet || s[s.length - 2]?.byCategory || {} : {};
-    const bTotal = Object.values(cur).reduce((a: number, b: any) => a + (b || 0), 0) || 1;
-    const breakdown = [...new Set([...Object.keys(cur), ...Object.keys(prev)])]
-      .map((k) => ({
-        label: k === 'Bank' ? 'Cash' : k,
-        value: cur[k] || 0,
-        delta: (cur[k] || 0) - (prev[k] || 0),
-        pct: ((cur[k] || 0) / bTotal) * 100,
-      }))
-      .filter((x) => x.value > 0)
-      .sort((a, b) => b.value - a.value);
-
     return {
       title,
       netWorth: dash.netWorth,
@@ -122,16 +100,10 @@ export default function Studio() {
       alloc: (alloc.netItems ?? alloc.items) as { label: string; value: number; pct: number }[],
       allocTotal: alloc.netTotal ?? alloc.total,
       debtNetted: alloc.totalDebt ?? 0,
-      breakdown,
-      breakdownTotal: bTotal,
-      fireTarget: settings && settings.swr ? (settings.fire_target_monthly_income * 12) / settings.swr : 3000000,
-      targetAge: settings?.target_retire_age ?? 45,
-      series,
       handle,
       mode,
-      notes,
     };
-  }, [dash, alloc, settings, title, handle, mode, notes]);
+  }, [dash, alloc, title, handle, mode]);
 
   if (!data) return <PageSkeleton />;
 
@@ -140,7 +112,7 @@ export default function Studio() {
       <PageHeader
         icon={Palette}
         title="Studio"
-        subtitle="1080×1080 cards from your live numbers — download or copy, then post. Your handle & theme stay on this machine."
+        subtitle="Two 1080×1080 cards from your live numbers — download or copy, then post. Your handle & theme stay on this machine."
       />
 
       {/* Controls */}
@@ -198,27 +170,12 @@ export default function Studio() {
             </label>
           ))}
         </div>
-        <div className="mt-4">
-          <Field label="Notes (for the Notes card — one bullet per line)">
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              placeholder={'added car (fully paid off) to net worth\neventually trimming cash under 10%\nin between jobs — no salary this month'}
-              className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent leading-relaxed"
-            />
-          </Field>
-        </div>
       </Card>
 
       {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        <StudioCard id="1-number" draw={(x) => drawCover(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
-        <StudioCard id="2-allocation" draw={(x) => drawDonut(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
-        <StudioCard id="3-trend" draw={(x) => drawTrend(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
-        <StudioCard id="4-breakdown" draw={(x) => drawBreakdown(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
-        <StudioCard id="5-fire" draw={(x) => drawFire(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
-        <StudioCard id="6-notes" draw={(x) => drawNotes(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 max-w-5xl">
+        <StudioCard id="net-worth" draw={(x) => drawCover(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
+        <StudioCard id="allocation" draw={(x) => drawDonut(x, data, theme)} deps={[data, theme]} toast={toast} title={data.title} />
       </div>
 
       <p className="text-xs text-muted">
@@ -227,7 +184,7 @@ export default function Studio() {
       </p>
       {data.debtNetted > 0 && (
         <p className="text-xs text-muted">
-          The allocation and breakdown cards show your <strong className="text-text">equity</strong> — each
+          The allocation card shows your <strong className="text-text">equity</strong> — each
           borrowing is subtracted from the asset it funded, so the slices add up to the net-worth figure
           on the cards ({rm(data.allocTotal)}). A financed asset shown gross would read as though you
           owned it outright, which is the one thing a shared card must not do. It also means you need
@@ -309,87 +266,138 @@ function StudioCard({
 type Ctx = CanvasRenderingContext2D;
 const F = (w: number, s: number) => `${w} ${s}px 'Segoe UI', 'Arial Rounded MT Bold', Arial, sans-serif`;
 
-function bgBase(x: Ctx, t: Theme) {
-  const g = x.createLinearGradient(0, 0, 0, SIZE);
-  g.addColorStop(0, t.bgTop);
-  g.addColorStop(1, t.bgBottom);
-  x.fillStyle = g;
-  x.fillRect(0, 0, SIZE, SIZE);
-  // faint background sprout-coins for texture
+/** Outer margin. Everything lines up on this, so the two cards feel like a set. */
+const M = 96;
+
+function hexA(hex: string, a: number): string {
+  const n = hex.replace('#', '');
+  const v = (i: number) => parseInt(n.slice(i, i + 2), 16);
+  return `rgba(${v(0)},${v(2)},${v(4)},${a})`;
+}
+
+function shade(hex: string, amt: number): string {
+  const n = hex.replace('#', '');
+  const v = (i: number) => Math.max(0, Math.min(255, parseInt(n.slice(i, i + 2), 16) + amt));
+  return `rgb(${v(0)},${v(2)},${v(4)})`;
+}
+
+function roundRect(x: Ctx, a: number, b: number, w: number, h: number, r: number) {
+  x.beginPath();
+  x.moveTo(a + r, b);
+  x.arcTo(a + w, b, a + w, b + h, r);
+  x.arcTo(a + w, b + h, a, b + h, r);
+  x.arcTo(a, b + h, a, b, r);
+  x.arcTo(a, b, a + w, b, r);
+  x.closePath();
+}
+
+/**
+ * Shrink until it fits. Net worth is the whole point of the card, so it must
+ * never be clipped or wrap — and it gains a digit every so often.
+ */
+function fitText(x: Ctx, txt: string, maxW: number, weight: number, start: number, min = 56): number {
+  let s = start;
+  for (;;) {
+    x.font = F(weight, s);
+    if (x.measureText(txt).width <= maxW || s <= min) break;
+    s -= 4;
+  }
+  return s;
+}
+
+/** Letter-spaced small caps, for the one line above the month. */
+function kicker(x: Ctx, t: Theme, txt: string, y: number) {
   x.save();
-  x.globalAlpha = 0.08;
-  sproutCoin(x, 920, 180, 130, t);
-  sproutCoin(x, 140, 900, 90, t);
+  x.fillStyle = hexA(t.dim, 0.95);
+  x.font = F(700, 30);
+  let px = M;
+  for (const ch of txt.toUpperCase()) {
+    x.fillText(ch, px, y);
+    px += x.measureText(ch).width + 4.5;
+  }
   x.restore();
 }
 
-function header(x: Ctx, t: Theme, kicker: string, big: string) {
-  x.textAlign = 'left';
-  x.fillStyle = t.dim;
-  x.font = F(700, 38);
-  x.fillText(kicker.toUpperCase(), 84, 122);
-  x.fillStyle = t.ink;
-  x.font = F(800, 68);
-  x.fillText(big, 84, 205);
-  // underline squiggle
-  x.strokeStyle = t.accent;
-  x.lineWidth = 8;
-  x.lineCap = 'round';
+function rule(x: Ctx, t: Theme, y: number) {
+  x.save();
+  x.strokeStyle = hexA(t.ink, 0.14);
+  x.lineWidth = 2;
   x.beginPath();
-  x.moveTo(88, 235);
-  x.quadraticCurveTo(160, 255, 240, 235);
+  x.moveTo(M, y);
+  x.lineTo(SIZE - M, y);
   x.stroke();
+  x.restore();
+}
+
+/**
+ * The background wash, as a fill style. Defined over the whole canvas rather
+ * than relative to a shape, so filling any shape with it lands exactly the
+ * colour the background has at that spot - which is how the donut hole is cut.
+ */
+function bgGradient(x: Ctx, t: Theme): CanvasGradient {
+  const g = x.createLinearGradient(0, 0, 0, SIZE);
+  g.addColorStop(0, t.bgTop);
+  g.addColorStop(1, t.bgBottom);
+  return g;
+}
+
+function bgBase(x: Ctx, t: Theme) {
+  // A plain vertical wash. The old version stamped faint coin watermarks over
+  // this; at feed size they read as smudges rather than as texture.
+  x.fillStyle = bgGradient(x, t);
+  x.fillRect(0, 0, SIZE, SIZE);
+}
+
+function header(x: Ctx, t: Theme, eyebrow: string, month: string) {
+  x.textAlign = 'left';
+  kicker(x, t, eyebrow, 150);
+  x.fillStyle = t.ink;
+  const s = fitText(x, month, SIZE - M * 2, 800, 64, 40);
+  x.fillText(month, M, 150 + s + 14);
+  rule(x, t, 150 + s + 56);
 }
 
 function footer(x: Ctx, t: Theme, handle: string) {
-  sproutCoin(x, 100, SIZE - 84, 20, t);
+  const y = SIZE - 86;
+  rule(x, t, y - 48);
+  sproutCoin(x, M + 17, y - 9, 17, t);
   x.textAlign = 'left';
-  x.fillStyle = t.dim;
-  x.font = F(500, 22);
-  x.fillText('personal journal · not financial advice', 136, SIZE - 76);
+  x.fillStyle = hexA(t.dim, 0.9);
+  x.font = F(600, 24);
+  x.fillText('personal journal · not financial advice', M + 48, y);
   x.textAlign = 'right';
   x.fillStyle = t.ink;
-  x.font = F(800, 28);
-  x.fillText(handle, SIZE - 84, SIZE - 76);
+  x.font = F(800, 30);
+  x.fillText(handle, SIZE - M, y);
   x.textAlign = 'left';
 }
 
 /** Original brand mark: a coin with a two-leaf sprout. */
 function sproutCoin(x: Ctx, cx: number, cy: number, r: number, t: Theme) {
   x.save();
-  // coin
   x.beginPath();
   x.arc(cx, cy, r, 0, Math.PI * 2);
   x.fillStyle = t.coin;
   x.fill();
-  x.lineWidth = Math.max(3, r * 0.09);
+  x.lineWidth = Math.max(2, r * 0.09);
   x.strokeStyle = shade(t.coin, -30);
   x.stroke();
-  // inner rim
-  x.beginPath();
-  x.arc(cx, cy, r * 0.72, 0, Math.PI * 2);
-  x.strokeStyle = shade(t.coin, -18);
-  x.lineWidth = Math.max(2, r * 0.05);
-  x.stroke();
-  // RM letters
   x.fillStyle = shade(t.coin, -45);
-  x.font = F(800, Math.round(r * 0.62));
+  x.font = F(800, Math.round(r * 0.72));
   x.textAlign = 'center';
   x.textBaseline = 'middle';
-  x.fillText('RM', cx, cy + r * 0.05);
+  x.fillText('RM', cx, cy + r * 0.06);
   x.textBaseline = 'alphabetic';
-  // sprout stem
   const sy = cy - r;
   x.strokeStyle = t.accent;
-  x.lineWidth = Math.max(4, r * 0.12);
+  x.lineWidth = Math.max(3, r * 0.14);
   x.lineCap = 'round';
   x.beginPath();
-  x.moveTo(cx, sy + r * 0.1);
-  x.quadraticCurveTo(cx + r * 0.05, sy - r * 0.25, cx, sy - r * 0.45);
+  x.moveTo(cx, sy + r * 0.12);
+  x.quadraticCurveTo(cx + r * 0.05, sy - r * 0.22, cx, sy - r * 0.4);
   x.stroke();
-  // leaves
-  leaf(x, cx, sy - r * 0.42, r * 0.42, -1, t.accent);
-  leaf(x, cx, sy - r * 0.42, r * 0.42, 1, shade(t.accent, 18));
+  leaf(x, cx, sy - r * 0.38, r * 0.4, -1, t.accent);
+  leaf(x, cx, sy - r * 0.38, r * 0.4, 1, shade(t.accent, 18));
   x.restore();
   x.textAlign = 'left';
 }
@@ -404,29 +412,9 @@ function leaf(x: Ctx, px: number, py: number, s: number, dir: number, col: strin
   x.fill();
 }
 
-function panel(x: Ctx, t: Theme, px: number, py: number, w: number, h: number, alpha = 0.55) {
-  x.save();
-  x.globalAlpha = alpha;
-  roundRect(x, px, py, w, h, 36);
-  x.fillStyle = t.panel;
-  x.fill();
-  x.restore();
-}
-
-function roundRect(x: Ctx, a: number, b: number, w: number, h: number, r: number) {
-  x.beginPath();
-  x.moveTo(a + r, b);
-  x.arcTo(a + w, b, a + w, b + h, r);
-  x.arcTo(a + w, b + h, a, b + h, r);
-  x.arcTo(a, b + h, a, b, r);
-  x.arcTo(a, b, a + w, b, r);
-  x.closePath();
-}
-
-function shade(hex: string, amt: number): string {
-  const n = hex.replace('#', '');
-  const v = (i: number) => Math.max(0, Math.min(255, parseInt(n.slice(i, i + 2), 16) + amt));
-  return `rgb(${v(0)},${v(2)},${v(4)})`;
+function donutPalette(t: Theme, n: number): string[] {
+  const base = [t.accent, t.coin, '#5b8cff', '#a06bff', '#ff8a5c', '#e05c7a', '#54b8d0', '#8b97ab'];
+  return Array.from({ length: n }, (_, i) => base[i % base.length]);
 }
 
 // ---------- Card 1: the number ----------
@@ -435,60 +423,67 @@ function drawCover(x: Ctx, d: any, t: Theme) {
   header(x, t, 'net worth update', d.title);
 
   const up = d.mom >= 0;
-  panel(x, t, 84, 320, SIZE - 168, 430);
+  const pctMode = d.mode !== 'rm';
 
-  x.fillStyle = t.dim;
-  x.font = F(700, 40);
-  x.fillText(d.mode === 'rm' ? 'Net worth' : 'Net worth growth', 140, 420);
+  x.fillStyle = hexA(t.dim, 0.95);
+  x.font = F(600, 34);
+  x.fillText(pctMode ? 'Net worth growth' : 'Net worth', M, 400);
 
+  // The hero figure, sized to the space rather than to a fixed number, so one
+  // more digit never pushes it off the card.
+  const big = pctMode ? pctFmt(d.momPct, 1) : rmFmt(d.netWorth);
   x.fillStyle = t.ink;
-  if (d.mode === 'rm') {
-    x.font = F(800, 128);
-    x.fillText(rmFmt(d.netWorth), 132, 560);
-  } else {
-    x.font = F(800, 168);
-    x.fillText(pctFmt(d.momPct, 1), 132, 580);
-  }
+  const bs = fitText(x, big, SIZE - M * 2, 800, 170, 90);
+  x.fillText(big, M, 400 + bs * 0.78 + 36);
 
-  // delta pill
-  const deltaTxt = d.mode === 'rm' ? `${up ? '▲' : '▼'} ${rmFmt(Math.abs(d.mom)).slice(3)} vs last month  (${pctFmt(d.momPct, 1)})` : `${up ? '▲' : '▼'} vs last month`;
-  x.font = F(700, 44);
+  const pillY = 400 + bs * 0.78 + 92;
+  const arrow = up ? '▲' : '▼';
+  const deltaTxt = pctMode
+    ? `${arrow} vs last month`
+    : `${arrow} ${rmFmt(Math.abs(d.mom)).slice(3)}  ·  ${pctFmt(d.momPct, 1)} vs last month`;
+  x.font = F(700, 38);
   const tw = x.measureText(deltaTxt).width;
-  roundRect(x, 132, 620, tw + 72, 84, 42);
+  roundRect(x, M, pillY, tw + 64, 76, 38);
   x.fillStyle = up ? t.accent : '#d64550';
   x.fill();
   x.fillStyle = '#ffffff';
-  x.fillText(deltaTxt, 168, 676);
+  x.fillText(deltaTxt, M + 32, pillY + 50);
 
-  // accessible line
-  x.fillStyle = t.dim;
-  x.font = F(600, 40);
-  const exTxt =
-    d.mode === 'rm'
-      ? `FIRE-usable (ex-EPF): ${rmFmt(d.exEpf)}`
-      : `FIRE-usable (ex-EPF): ${d.exEpfPct.toFixed(0)}% of net worth`;
-  x.fillText(exTxt, 132, 800);
+  // The figure that actually matters before 55, EPF being locked until then.
+  rule(x, t, 806);
+  x.fillStyle = hexA(t.dim, 0.95);
+  x.font = F(600, 30);
+  x.fillText('FIRE-usable  ·  excludes EPF', M, 866);
+  x.fillStyle = t.ink;
+  x.font = F(800, 58);
+  x.fillText(pctMode ? `${d.exEpfPct.toFixed(0)}%` : rmFmt(d.exEpf), M, 928);
+  if (!pctMode) {
+    x.fillStyle = hexA(t.dim, 0.9);
+    x.font = F(700, 30);
+    x.textAlign = 'right';
+    x.fillText(`${d.exEpfPct.toFixed(0)}% of net worth`, SIZE - M, 928);
+    x.textAlign = 'left';
+  }
 
   footer(x, t, d.handle);
 }
 
-// ---------- Card 2: allocation donut ----------
+// ---------- Card 2: allocation ----------
 function drawDonut(x: Ctx, d: any, t: Theme) {
   bgBase(x, t);
   header(x, t, 'where it sits', d.title);
 
-  const items = d.alloc;
+  const items = d.alloc.filter((i: any) => i.value > 0);
   const total = items.reduce((s: number, i: any) => s + i.value, 0) || 1;
   const palette = donutPalette(t, items.length);
+  const pctMode = d.mode !== 'rm';
 
-  const cx = SIZE / 2;
-  const cy = 600;
-  const R = 265;
-  const r = 158;
+  const cx = 330;
+  const cy = 620;
+  const R = 196;
+  const r = 122;
 
-  // slices + collect label positions (name + %, no legend)
   let ang = -Math.PI / 2;
-  const labels: { mid: number; text: string; color: string }[] = [];
   items.forEach((it: any, i: number) => {
     const sw = (it.value / total) * Math.PI * 2;
     x.beginPath();
@@ -497,294 +492,59 @@ function drawDonut(x: Ctx, d: any, t: Theme) {
     x.closePath();
     x.fillStyle = palette[i];
     x.fill();
-    if (it.value / total >= 0.015) {
-      const name = it.label === 'Cash/Bank' ? 'Cash' : it.label;
-      labels.push({ mid: ang + sw / 2, text: `${name} ${it.pct.toFixed(1)}%`, color: palette[i] });
-    }
     ang += sw;
   });
 
-  // hole
+  // Fill the hole with the background rather than erasing to transparent:
+  // destination-out leaves a see-through disc in the exported PNG, and dark
+  // centre text then sits on whatever happens to be behind it.
+  x.fillStyle = bgGradient(x, t);
   x.beginPath();
   x.arc(cx, cy, r, 0, Math.PI * 2);
-  const g = x.createLinearGradient(0, cy - r, 0, cy + r);
-  g.addColorStop(0, t.bgTop);
-  g.addColorStop(1, t.bgBottom);
-  x.fillStyle = g;
-  x.fill();
-  x.textAlign = 'center';
-  x.fillStyle = t.ink;
-  if (d.mode === 'rm') {
-    x.font = F(800, 54);
-    x.fillText(rmFmt(d.netWorth), cx, cy);
-    x.font = F(600, 30);
-    x.fillStyle = t.dim;
-    x.fillText('net worth', cx, cy + 46);
-  } else {
-    x.font = F(800, 50);
-    x.fillText('allocation', cx, cy + 8);
-  }
-  x.textAlign = 'left';
-
-  // labels around the pie with leader lines; stacked per side so they never overlap
-  const MIN = 48;
-  const layoutSide = (side: typeof labels, sign: 1 | -1) => {
-    const pts = side
-      .map((l) => ({ ...l, y: cy + Math.sin(l.mid) * (R + 58) }))
-      .sort((a, b) => a.y - b.y);
-    for (const p of pts) p.y = Math.max(280, p.y); // keep clear of the header
-    for (let i = 1; i < pts.length; i++) if (pts[i].y - pts[i - 1].y < MIN) pts[i].y = pts[i - 1].y + MIN;
-    pts.forEach((p) => {
-      const sx = cx + Math.cos(p.mid) * (R + 6);
-      const sy = cy + Math.sin(p.mid) * (R + 6);
-      const elbow = cx + sign * (R + 44);
-      x.strokeStyle = p.color;
-      x.lineWidth = 5;
-      x.lineCap = 'round';
-      x.beginPath();
-      x.moveTo(sx, sy);
-      x.lineTo(elbow, p.y - 10);
-      x.lineTo(elbow + sign * 18, p.y - 10);
-      x.stroke();
-      x.fillStyle = t.ink;
-      x.font = F(700, 31);
-      x.textAlign = sign > 0 ? 'left' : 'right';
-      x.fillText(p.text, elbow + sign * 30, p.y);
-    });
-  };
-  layoutSide(labels.filter((l) => Math.cos(l.mid) >= 0), 1);
-  layoutSide(labels.filter((l) => Math.cos(l.mid) < 0), -1);
-  x.textAlign = 'left';
-
-  footer(x, t, d.handle);
-}
-
-function donutPalette(t: Theme, n: number): string[] {
-  const base = [t.accent, t.coin, '#5b8cff', '#a06bff', '#ff8a5c', '#e05c7a', '#54b8d0', '#8b97ab'];
-  return Array.from({ length: n }, (_, i) => base[i % base.length]);
-}
-
-// ---------- Card 3: trend ----------
-function drawTrend(x: Ctx, d: any, t: Theme) {
-  bgBase(x, t);
-  header(x, t, 'the climb', d.title);
-
-  const pts = d.series.map((s: any) => ({ label: monthLabel(s.date), v: s.netWorth }));
-  if (pts.length < 2) return footer(x, t, d.handle);
-  const vals = pts.map((p: any) => p.v);
-  const lo = Math.min(...vals) * 0.96;
-  const hi = Math.max(...vals) * 1.04;
-  const X0 = 120, X1 = SIZE - 100, Y0 = 780, Y1 = 320;
-  const px = (i: number) => X0 + ((X1 - X0) * i) / (pts.length - 1);
-  const py = (v: number) => Y0 - ((Y0 - Y1) * (v - lo)) / (hi - lo);
-
-  // area fill
-  x.beginPath();
-  x.moveTo(px(0), Y0);
-  pts.forEach((p: any, i: number) => x.lineTo(px(i), py(p.v)));
-  x.lineTo(px(pts.length - 1), Y0);
-  x.closePath();
-  const g = x.createLinearGradient(0, Y1, 0, Y0);
-  g.addColorStop(0, hexA(t.accent, 0.45));
-  g.addColorStop(1, hexA(t.accent, 0));
-  x.fillStyle = g;
   x.fill();
 
-  // line
-  x.beginPath();
-  pts.forEach((p: any, i: number) => (i ? x.lineTo(px(i), py(p.v)) : x.moveTo(px(i), py(p.v))));
-  x.strokeStyle = t.accent;
-  x.lineWidth = 10;
-  x.lineJoin = 'round';
-  x.lineCap = 'round';
-  x.stroke();
-
-  // dots + sparse labels
-  pts.forEach((p: any, i: number) => {
-    x.beginPath();
-    x.arc(px(i), py(p.v), 11, 0, Math.PI * 2);
-    x.fillStyle = t.accent;
-    x.fill();
-    x.beginPath();
-    x.arc(px(i), py(p.v), 5, 0, Math.PI * 2);
-    x.fillStyle = '#ffffff';
-    x.fill();
-    if (i % Math.ceil(pts.length / 6) === 0 || i === pts.length - 1) {
-      x.fillStyle = t.dim;
-      x.font = F(600, 26);
-      x.textAlign = 'center';
-      x.fillText(p.label, px(i), Y0 + 46);
-      x.textAlign = 'left';
-    }
-  });
-  // first/last value labels
-  const first = vals[0], last = vals[vals.length - 1];
   x.textAlign = 'center';
-  x.fillStyle = t.ink;
-  x.font = F(800, 40);
-  if (d.mode === 'rm') {
-    x.fillText((first / 1000).toFixed(0) + 'k', px(0), py(first) - 34);
-    x.fillText((last / 1000).toFixed(0) + 'k', px(pts.length - 1), py(last) - 34);
-  }
-  x.textAlign = 'left';
-
-  // caption — kept well below the month-label row
-  const growth = ((last - first) / first) * 100;
-  x.fillStyle = t.ink;
-  x.font = F(800, 46);
-  const cap =
-    d.mode === 'rm'
-      ? `+${rmFmt(last - first).slice(3)} in ${pts.length - 1} months (${pctFmt(growth, 0)})`
-      : `${pctFmt(growth, 0)} in ${pts.length - 1} months`;
-  x.fillText(cap, 120, 910);
-
-  footer(x, t, d.handle);
-}
-
-function hexA(hex: string, a: number): string {
-  const n = hex.replace('#', '');
-  return `rgba(${parseInt(n.slice(0, 2), 16)},${parseInt(n.slice(2, 4), 16)},${parseInt(n.slice(4, 6), 16)},${a})`;
-}
-
-// ---------- Card 4: every-investment breakdown ----------
-function drawBreakdown(x: Ctx, d: any, t: Theme) {
-  bgBase(x, t);
-  header(x, t, 'what i hold', d.title);
-
-  const rows = d.breakdown as { label: string; value: number; delta: number; pct: number }[];
-  const palette = donutPalette(t, rows.length);
-  const top = 320;
-  const rowH = Math.min(110, (SIZE - top - 130) / Math.max(rows.length, 1));
-
-  rows.forEach((r, i) => {
-    const y = top + i * rowH;
-    // color dot + name
-    x.beginPath();
-    x.arc(112, y + rowH / 2 - 6, 16, 0, Math.PI * 2);
-    x.fillStyle = palette[i];
-    x.fill();
-    x.fillStyle = t.ink;
-    x.font = F(700, 40);
-    x.textAlign = 'left';
-    x.fillText(r.label, 150, y + rowH / 2 + 6);
-
-    // % of total (dim, under name)
-    x.fillStyle = t.dim;
-    x.font = F(600, 26);
-    x.fillText(r.pct.toFixed(1) + '% of assets', 150, y + rowH / 2 + 40);
-
-    // value (right)
-    x.textAlign = 'right';
+  if (pctMode) {
     x.fillStyle = t.ink;
     x.font = F(800, 42);
-    x.fillText(d.mode === 'rm' ? rmFmt(r.value) : r.pct.toFixed(1) + '%', SIZE - 84, y + rowH / 2 - 4);
-
-    // MoM delta arrow
-    const up = r.delta >= 0;
-    x.fillStyle = up ? t.accent : '#d64550';
-    x.font = F(700, 28);
-    const deltaTxt =
-      Math.abs(r.delta) < 1
-        ? '—'
-        : (up ? '▲ ' : '▼ ') + (d.mode === 'rm' ? rmFmt(Math.abs(r.delta)).slice(3) : (r.delta >= 0 ? '+' : '') + rmFmt(r.delta).slice(3));
-    x.fillText(deltaTxt, SIZE - 84, y + rowH / 2 + 34);
-    x.textAlign = 'left';
-
-    // divider
-    if (i < rows.length - 1) {
-      x.strokeStyle = hexA(t.ink, 0.1);
-      x.lineWidth = 2;
-      x.beginPath();
-      x.moveTo(150, y + rowH);
-      x.lineTo(SIZE - 84, y + rowH);
-      x.stroke();
-    }
-  });
-
-  footer(x, t, d.handle);
-}
-
-// ---------- Card 5: FIRE progress ----------
-function drawFire(x: Ctx, d: any, t: Theme) {
-  bgBase(x, t);
-  header(x, t, 'the long game', d.title);
-
-  const pctToFire = Math.min(100, (d.netWorth / d.fireTarget) * 100);
-
-  panel(x, t, 84, 340, SIZE - 168, 360);
-  x.fillStyle = t.ink;
-  x.font = F(800, 150);
-  x.textAlign = 'left';
-  x.fillText(pctToFire.toFixed(1) + '%', 140, 500);
-  x.fillStyle = t.dim;
-  x.font = F(600, 40);
-  x.fillText(`to my FIRE number of ${rmFmt(d.fireTarget)}`, 140, 570);
-
-  // progress bar
-  const bx = 140, bw = SIZE - 280, by = 610, bh = 54;
-  roundRect(x, bx, by, bw, bh, 27);
-  x.fillStyle = hexA(t.ink, 0.12);
-  x.fill();
-  roundRect(x, bx, by, Math.max(bh, (bw * pctToFire) / 100), bh, 27);
-  x.fillStyle = t.accent;
-  x.fill();
-
-  x.fillStyle = t.dim;
-  x.font = F(600, 40);
-  x.fillText(`Target: financial independence by ${d.targetAge}`, 130, 800);
-  x.fillStyle = t.ink;
-  x.font = F(800, 46);
-  x.fillText('Slow is fine. Quitting is the only way to lose.', 130, 880);
-
-  footer(x, t, d.handle);
-}
-
-// ---------- Card 6: notes ----------
-function drawNotes(x: Ctx, d: any, t: Theme) {
-  bgBase(x, t);
-  header(x, t, 'this month', d.title + ' notes');
-
-  const lines = String(d.notes || '')
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 6);
-
-  if (lines.length === 0) {
-    x.fillStyle = t.dim;
-    x.font = F(600, 40);
-    x.fillText('Type your reflections in the Notes box →', 100, 520);
-    return footer(x, t, d.handle);
+    x.fillText('allocation', cx, cy + 14);
+  } else {
+    x.fillStyle = t.ink;
+    const s = fitText(x, rmFmt(d.netWorth), r * 1.75, 800, 46, 26);
+    x.fillText(rmFmt(d.netWorth), cx, cy + 2);
+    x.fillStyle = hexA(t.dim, 0.95);
+    x.font = F(600, 24);
+    x.fillText('net worth', cx, cy + s * 0.6 + 22);
   }
+  x.textAlign = 'left';
 
-  let y = 360;
-  lines.forEach((ln) => {
-    // bullet dot
-    x.beginPath();
-    x.arc(112, y - 14, 12, 0, Math.PI * 2);
-    x.fillStyle = t.accent;
+  // A legend, not leader lines. Six labels with elbows around a pie turn into
+  // noise once the card is scaled down to a phone feed; a list stays readable
+  // and leaves room for the ringgit figure as well.
+  const lx = 608;
+  const pitch = Math.min(74, Math.floor(430 / Math.max(items.length, 1)));
+  let ly = cy - ((items.length - 1) * pitch) / 2 - 10;
+  items.forEach((it: any, i: number) => {
+    const name = it.label === 'Cash/Bank' ? 'Cash' : it.label;
+    roundRect(x, lx, ly - 22, 26, 26, 8);
+    x.fillStyle = palette[i];
     x.fill();
-    y = wrapText(x, ln, 152, y, SIZE - 240, 58, t.ink, F(600, 42)) + 46;
+
+    x.fillStyle = t.ink;
+    x.font = F(700, 34);
+    x.fillText(name, lx + 44, ly);
+
+    x.textAlign = 'right';
+    x.font = F(800, 34);
+    x.fillText(it.pct.toFixed(1) + '%', SIZE - M, ly);
+    if (!pctMode) {
+      x.fillStyle = hexA(t.dim, 0.9);
+      x.font = F(600, 24);
+      x.fillText(rmFmt(it.value), SIZE - M, ly + 28);
+    }
+    x.textAlign = 'left';
+    ly += pitch;
   });
 
   footer(x, t, d.handle);
-}
-
-/** wrap text, return the y of the last line */
-function wrapText(x: Ctx, txt: string, X: number, Y: number, maxw: number, lh: number, col: string, font: string): number {
-  x.font = font;
-  x.fillStyle = col;
-  x.textAlign = 'left';
-  const words = txt.split(' ');
-  let line = '';
-  let y = Y;
-  for (const w of words) {
-    if (x.measureText(line + w).width > maxw && line) {
-      x.fillText(line.trim(), X, y);
-      line = w + ' ';
-      y += lh;
-    } else line += w + ' ';
-  }
-  x.fillText(line.trim(), X, y);
-  return y;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Target, Plus, Trash2, AlertTriangle, CalendarCheck, Loader2, Coins } from 'lucide-react';
+import { Target, Plus, Trash2, AlertTriangle, CalendarCheck, Loader2, Coins, Scale } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
 import { rm, safeJson } from '../lib/format';
 import { Card, CardHeader, Button, Modal, Field, TextInput, SelectInput, PageSkeleton, PageHeader, cn, Badge } from '../components/ui';
@@ -67,6 +67,21 @@ export default function Goals() {
           <ul className="text-sm space-y-1">
             {data.drift.alerts.map((a: any, i: number) => (
               <li key={i} className="text-muted">• {a.msg}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Position facts — leverage is a deliberate strategy, so it is stated
+          plainly here rather than shown as a concentration alert. */}
+      {data.drift.position?.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+            <Scale size={16} className="text-muted" /> Position
+          </div>
+          <ul className="text-sm space-y-1">
+            {data.drift.position.map((p: any, i: number) => (
+              <li key={i} className="text-muted">• {p.msg}</li>
             ))}
           </ul>
         </Card>

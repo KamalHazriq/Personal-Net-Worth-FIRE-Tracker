@@ -26,6 +26,13 @@ export interface FireLiability {
   startBalance: number;   // outstanding today
   monthlyPayment: number; // total instalment (profit + principal)
   annualRate: number;     // financing rate, 0.0405 = 4.05%
+  /**
+   * The investment this borrowing funded. Once the debt is cleared the
+   * instalment stops being owed, so from that month it is redirected into this
+   * account — dropping it instead would project the payment continuing into
+   * nothing and understate the position for the rest of the horizon.
+   */
+  financedAccountId?: number | null;
   excluded?: boolean;
 }
 
@@ -107,11 +114,20 @@ export function project(inp: FireInputs): FireResult {
   for (let m = 1; m <= months; m++) {
     const yearIndex = Math.floor((m - 1) / 12);
     cash = cash * (1 + cashM);
+    // An instalment on a debt that has been cleared is no longer owed, so it
+    // becomes available to invest in whatever the borrowing funded.
+    const freed = new Map<number, number>();
+    debts.forEach((l, i) => {
+      if (debtBal[i] <= 0 && l.monthlyPayment > 0 && l.financedAccountId != null) {
+        freed.set(l.financedAccountId, (freed.get(l.financedAccountId) || 0) + l.monthlyPayment);
+      }
+    });
+
     inp.accounts.forEach((a, i) => {
       const isExcluded = !!a.excluded;
       const contrib = isExcluded ? 0 : a.monthly * Math.pow(1 + a.growth, yearIndex);
       const rate = isExcluded ? 0 : rates[i];
-      balances[i] = balances[i] * (1 + rate) + contrib;
+      balances[i] = balances[i] * (1 + rate) + contrib + (isExcluded ? 0 : freed.get(a.id) || 0);
     });
     // Amortise each debt: accrue the financing charge, then apply the instalment.
     // A payment that never exceeds the charge leaves the balance standing, which

@@ -78,6 +78,7 @@ export default function Fire() {
           startBalance: l.startBalance,
           monthlyPayment: l.monthlyPayment,
           annualRate: l.annualRate,
+          financedAccountId: l.financedAccountId ?? null,
           excluded: !!l.excluded,
           recentMonthlyChange: l.recentMonthlyChange,
         })),
@@ -410,7 +411,10 @@ export default function Fire() {
               ? ` · fully cleared by age ${result.debtClearedAge}`
               : ' · still outstanding at the end of the projection'}
             . The "observed" column is the average monthly balance movement from your own
-            snapshots — a sanity check for the instalment you enter.
+            snapshots — a sanity check for the instalment you enter. An instalment is treated
+            like a contribution: money arriving from income. Once a debt is cleared it is no
+            longer owed, so from that month it is invested into whatever the borrowing funded
+            (set that on the debt in Accounts) rather than disappearing from the projection.
           </div>
         </Card>
       )}

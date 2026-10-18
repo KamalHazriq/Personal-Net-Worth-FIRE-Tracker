@@ -289,8 +289,8 @@ function round(x: number, dp = 2): number {
 // ---- Companion: drift alerts + monthly review ------------------------------
 const DEFAULT_SINGLE_STOCK_CAP = 13; // % of MooMoo portfolio
 
-// Debt worth surfacing as a portfolio fact rather than noise. Below this a
-// credit-card balance paid off monthly would flag every month.
+// Debt worth stating as a position fact rather than noise. Below this a
+// credit-card balance paid off monthly would be mentioned every month.
 const LEVERAGE_FLAG_PCT = 20; // % of gross assets
 
 // Groups of related holdings to watch as a combined bet (from the advisor pack).
@@ -325,9 +325,10 @@ export function driftAlerts(db: Database.Database, cap = DEFAULT_SINGLE_STOCK_CA
       }
     }
   }
-  // Portfolio-level leverage. Reported as a fact with the numbers behind it —
-  // borrowing to invest is a deliberate strategy, not an error, but it belongs
-  // on screen next to the concentration flags rather than nowhere.
+  // Borrowing to invest is a deliberate strategy, not a problem, so this is
+  // kept OUT of `alerts` — those are concentration breaches against a cap and
+  // render as warnings. This is a separate, neutral statement of the position.
+  const position: { label: string; msg: string }[] = [];
   const nw = netWorthSeries(db);
   if (nw.length) {
     const latest = nw[nw.length - 1];
@@ -336,25 +337,29 @@ export function driftAlerts(db: Database.Database, cap = DEFAULT_SINGLE_STOCK_CA
     if (pct >= LEVERAGE_FLAG_PCT) {
       const financed = db
         .prepare(
-          `SELECT a.name, s.value v FROM snapshots s JOIN accounts a ON a.id=s.account_id
+          `SELECT a.name, s.value v,
+             (SELECT fa.name FROM accounts fa WHERE fa.id = a.financed_account_id) fundedName
+           FROM snapshots s JOIN accounts a ON a.id=s.account_id
            WHERE a.category='Liability' AND a.subtype='Loan' AND s.date=? AND s.value>0
            ORDER BY s.value DESC LIMIT 1`,
         )
         .get(latest.date) as any;
-      alerts.push({
-        level: 'info',
+      const money = (n: number) => 'RM ' + Math.round(n).toLocaleString('en-MY');
+      position.push({
         label: 'leverage',
         msg:
-          `Debt is ${pct.toFixed(0)}% of gross assets ` +
-          `(RM ${Math.round(latest.liability).toLocaleString('en-MY')} against ` +
-          `RM ${Math.round(gross).toLocaleString('en-MY')})` +
-          (financed ? `, mostly ${financed.name}.` : '.') +
-          ' Net worth already accounts for it; the FIRE projection nets it off too.',
+          `${money(latest.liability)} of debt against ${money(gross)} of assets (${pct.toFixed(0)}%)` +
+          (financed?.fundedName
+            ? `, mostly ${financed.name} funding ${financed.fundedName}.`
+            : financed
+              ? `, mostly ${financed.name}.`
+              : '.') +
+          ' Net worth, the allocation view and the FIRE projection all account for it.',
       });
     }
   }
 
-  return { cap, asOf: h.snapshot?.import_date ?? null, alerts };
+  return { cap, asOf: h.snapshot?.import_date ?? null, alerts, position };
 }
 
 export function monthlyReviewSummary(db: Database.Database) {
@@ -384,7 +389,7 @@ export function monthlyReviewSummary(db: Database.Database) {
   const MIN_INCOME_FOR_RATIO = 100;
   const growthVsIncome = income >= MIN_INCOME_FOR_RATIO ? (invested / income) * 100 : null;
   const alloc: any = latestAllocation(db);
-  const drift = driftAlerts(db).alerts;
+  const { alerts: drift, position } = driftAlerts(db);
 
   const lines = [
     `Net worth ${fmtDelta(last.netWorth - prev.netWorth)} to ${fmtRm(last.netWorth)} (accessible ${fmtDelta(
@@ -393,21 +398,38 @@ export function monthlyReviewSummary(db: Database.Database) {
     growthVsIncome != null
       ? `Invested pool ${fmtDelta(invested)} against ${fmtRm(income)} income (${growthVsIncome.toFixed(0)}%) — contributions and market movement together, not a savings rate.`
       : `Invested pool ${fmtDelta(invested)} (income too small this month to compare against).`,
-    `Top allocation: ${(alloc.items || [])
-      .slice(0, 3)
-      .map((i: any) => `${i.label} ${i.pct.toFixed(0)}%`)
-      .join(', ')}.`,
+    // With a financed asset the gross and net mixes differ a lot, so both are
+    // given rather than quietly presenting exposure as ownership.
+    (() => {
+      const top = (items: any[]) =>
+        (items || []).slice(0, 3).map((i: any) => `${i.label} ${i.pct.toFixed(0)}%`).join(', ');
+      return (alloc.totalDebt || 0) > 0
+        ? `Top allocation gross: ${top(alloc.items)} · net of debt: ${top(alloc.netItems)}.`
+        : `Top allocation: ${top(alloc.items)}.`;
+    })(),
     drift.length
-      ? `⚠ ${drift.length} flag(s): ${drift.map((d: any) => d.symbol || d.label || 'portfolio').join(', ')}.`
+      ? `⚠ ${drift.length} concentration flag(s): ${drift.map((d: any) => d.symbol).join(', ')}.`
       : 'No concentration flags.',
   ];
+
   if (last.liability > 0) {
+    // The Goals page carries the fuller "Position" statement; here it is one
+    // line, naming what the borrowing funded rather than repeating the share.
+    const funded = db
+      .prepare(
+        `SELECT a.name, (SELECT fa.name FROM accounts fa WHERE fa.id = a.financed_account_id) fundedName
+         FROM snapshots s JOIN accounts a ON a.id = s.account_id
+         WHERE a.category='Liability' AND a.subtype='Loan' AND s.date=? AND s.value>0
+         ORDER BY s.value DESC LIMIT 1`,
+      )
+      .get(last.date) as any;
     lines.splice(
       2,
       0,
       `Debt ${fmtRm(last.liability)} (${fmtDelta(last.liability - prev.liability)}) — ${(
         (last.liability / (last.bank + last.investment)) * 100
-      ).toFixed(0)}% of gross assets.`,
+      ).toFixed(0)}% of gross assets` +
+        (funded?.fundedName ? `, mostly ${funded.name} funding ${funded.fundedName}.` : '.'),
     );
   }
   return { date: last.date, summary: lines.join('\n'), drift, growthVsIncome, income };
@@ -455,7 +477,7 @@ export function fireSeed(db: Database.Database) {
   const liabilities = (
     db
       .prepare(
-        `SELECT a.id, a.name, a.subtype,
+        `SELECT a.id, a.name, a.subtype, a.financed_account_id financedAccountId,
            COALESCE(c.monthly_amount,0) monthlyPayment,
            COALESCE(c.annual_return_rate,0) annualRate,
            COALESCE(c.excluded,0) excluded,

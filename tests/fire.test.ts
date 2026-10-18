@@ -98,3 +98,74 @@ test('an excluded debt is left out of the projection', () => {
   assert.equal(r.startDebt, 0);
   assert.equal(r.points[0].debt, 0);
 });
+
+// ---- leverage: the spread decides, not the structure ----------------------
+// ASB financing is a deliberate strategy: borrow at ~4% into a fund paying
+// ~5-6% and keep the spread. Netting the debt off must not penalise that.
+//
+// The comparison has to be like-for-like on cash out of pocket: the engine
+// treats a loan instalment the same way it treats a contribution — money
+// arriving from income it doesn't model — so servicing the debt is only a fair
+// alternative to investing that same amount directly. Hold the monthly outflow
+// equal and the spread is what decides the outcome, which is the real question.
+
+const SPREAD_BASE = {
+  currentAge: 24, targetRetireAge: 45, epfUnlockAge: 55, horizonAge: 45,
+  swr: 0.05, targetIncome: 15000, cashStart: 0, cashReturn: 0,
+};
+const MONTHLY_OUTLAY = 700;
+
+/** Same cash out of pocket either way: service the loan, or invest it directly. */
+function compareLeverage(assetReturn: number, financingRate: number, equity: number, loan: number) {
+  const unlevered = project({
+    ...SPREAD_BASE,
+    accounts: [{ id: 1, name: 'Asset', subtype: 'ASB', is_epf: 0, startBalance: equity, monthly: MONTHLY_OUTLAY, annualReturn: assetReturn, growth: 0 }],
+  });
+  const levered = project({
+    ...SPREAD_BASE,
+    accounts: [{ id: 1, name: 'Asset', subtype: 'ASB', is_epf: 0, startBalance: equity + loan, monthly: 0, annualReturn: assetReturn, growth: 0 }],
+    liabilities: [{ id: 9, name: 'Financing', subtype: 'Loan', startBalance: loan, monthlyPayment: MONTHLY_OUTLAY, annualRate: financingRate, financedAccountId: 1 }],
+  });
+  return { unlevered, levered };
+}
+
+test('borrowing into a higher-returning asset ends ahead', () => {
+  // ASB ~5.5% funded at ~4.05%: the spread is the point of the strategy.
+  const { unlevered, levered } = compareLeverage(0.055, 0.0405, 18_970.13, 99_826.58);
+  assert.ok(levered.debtClearedAge != null, 'the instalment should clear the loan inside the horizon');
+  assert.ok(
+    levered.finalAccessible > unlevered.finalAccessible,
+    `a positive spread must end ahead: levered ${levered.finalAccessible.toFixed(0)} vs unlevered ${unlevered.finalAccessible.toFixed(0)}`,
+  );
+});
+
+test('borrowing into a lower-returning asset ends behind', () => {
+  // The same machinery must report a negative spread honestly, or the result
+  // above would just be the model flattering leverage.
+  const { unlevered, levered } = compareLeverage(0.02, 0.08, 20_000, 100_000);
+  assert.ok(
+    levered.finalAccessible < unlevered.finalAccessible,
+    `a negative spread must end behind: levered ${levered.finalAccessible.toFixed(0)} vs unlevered ${unlevered.finalAccessible.toFixed(0)}`,
+  );
+});
+
+test('a cleared debt frees its instalment into the asset it funded', () => {
+  const common = {
+    ...SPREAD_BASE,
+    accounts: [{ id: 1, name: 'Asset', subtype: 'ASB', is_epf: 0, startBalance: 50_000, monthly: 0, annualReturn: 0.05, growth: 0 }],
+  };
+  const loan = { id: 9, name: 'Financing', subtype: 'Loan', startBalance: 10_000, monthlyPayment: 1_000, annualRate: 0.04 };
+
+  // Linked: once the small loan clears, RM1,000/mo starts building the asset.
+  const linked = project({ ...common, liabilities: [{ ...loan, financedAccountId: 1 }] });
+  // Unlinked: the instalment has nowhere to go and is simply dropped.
+  const unlinked = project({ ...common, liabilities: [{ ...loan }] });
+
+  assert.ok(linked.debtClearedAge != null && linked.debtClearedAge! < 26, 'a 10k loan at 1k/mo clears in about a year');
+  assert.ok(
+    linked.finalAccessible > unlinked.finalAccessible,
+    `the freed instalment must keep working: linked ${linked.finalAccessible.toFixed(0)} vs unlinked ${unlinked.finalAccessible.toFixed(0)}`,
+  );
+  // It must not start flowing before the debt is actually gone.
+  assert.ok(Math.abs(linked.points[0].accessible - unlinked.points[0].accessible) < 0.01);
+});

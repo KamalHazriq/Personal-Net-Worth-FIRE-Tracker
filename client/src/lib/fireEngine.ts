@@ -69,9 +69,29 @@ export interface FireResult {
   monthlyIncomeAtTarget: number;
   startDebt: number;
   debtClearedAge: number | null; // null if still outstanding at the horizon
+  /**
+   * When each debt actually retires, computed from its own terms rather than
+   * the projection window — a 40-year financing routinely outlives the
+   * horizon, and "still outstanding" hides that the instalment carries on
+   * well past the retirement age.
+   */
+  debtPayoff: { name: string; age: number | null; monthlyPayment: number }[];
 }
 
+/**
+ * An expected annual return compounds, so the monthly equivalent is the twelfth
+ * root. Right for a dividend or growth rate.
+ */
 const monthlyRate = (annual: number) => Math.pow(1 + annual, 1 / 12) - 1;
+
+/**
+ * Financing is quoted as a nominal annual rate charged monthly, so the monthly
+ * charge is simply a twelfth of it — NOT the twelfth root. The difference looks
+ * small (4.05% gives 0.3375%/mo rather than 0.3314%/mo) but it decides whether
+ * an instalment actually retires the debt: RM422/mo on RM100,000 at 4.05% fits
+ * a 40-year term under this reading and clears 13 months early under the other.
+ */
+export const monthlyFinancingRate = (annual: number) => annual / 12;
 
 export function fireNumber(targetIncome: number, swr: number): number {
   return swr > 0 ? (targetIncome * 12) / swr : Infinity;
@@ -86,7 +106,7 @@ export function project(inp: FireInputs): FireResult {
 
   const debts = (inp.liabilities ?? []).filter((l) => !l.excluded);
   const debtBal = debts.map((l) => l.startBalance);
-  const debtRates = debts.map((l) => monthlyRate(l.annualRate));
+  const debtRates = debts.map((l) => monthlyFinancingRate(l.annualRate));
   const startDebt = debtBal.reduce((a, b) => a + b, 0);
   let debtClearedAge: number | null = startDebt === 0 ? inp.currentAge : null;
 
@@ -152,6 +172,26 @@ export function project(inp: FireInputs): FireResult {
   const atTarget = points.find((p) => p.age === inp.targetRetireAge) ?? null;
   const last = points[points.length - 1];
 
+  // Analytic payoff for each debt, independent of the horizon. `null` means the
+  // instalment never exceeds the financing charge, so it never retires.
+  const debtPayoff = debts.map((l, i) => {
+    const r = debtRates[i];
+    const principal = l.startBalance;
+    if (principal <= 0) return { name: l.name, age: inp.currentAge, monthlyPayment: l.monthlyPayment };
+    if (l.monthlyPayment <= 0) return { name: l.name, age: null, monthlyPayment: l.monthlyPayment };
+    if (r === 0) {
+      return {
+        name: l.name,
+        age: inp.currentAge + principal / l.monthlyPayment / 12,
+        monthlyPayment: l.monthlyPayment,
+      };
+    }
+    const charge = principal * r;
+    if (l.monthlyPayment <= charge) return { name: l.name, age: null, monthlyPayment: l.monthlyPayment };
+    const months = -Math.log(1 - (principal * r) / l.monthlyPayment) / Math.log(1 + r);
+    return { name: l.name, age: inp.currentAge + months / 12, monthlyPayment: l.monthlyPayment };
+  });
+
   return {
     points,
     fireNumber: fn,
@@ -163,6 +203,7 @@ export function project(inp: FireInputs): FireResult {
     monthlyIncomeAtTarget: atTarget ? (atTarget.accessible * inp.swr) / 12 : 0,
     startDebt,
     debtClearedAge,
+    debtPayoff,
   };
 }
 

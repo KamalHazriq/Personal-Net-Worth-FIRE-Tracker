@@ -21,6 +21,7 @@ import {
   sensitivity,
   solveContribution,
   fireNumber,
+  monthlyFinancingRate,
   type FireAccount,
   type FireInputs,
   type FireLiability,
@@ -183,6 +184,11 @@ export default function Fire() {
   // A non-positive SWR makes the FIRE number infinite and is rejected by the
   // API, so it's shown as unset rather than as "RM ∞".
   const swrInvalid = !(p.swr > 0);
+  // A long financing routinely outlives the retirement age, which makes the
+  // instalment a retirement expense the FIRE number above doesn't account for.
+  const stillPayingAtRetirement = (result.debtPayoff ?? []).filter(
+    (d) => d.monthlyPayment > 0 && d.age != null && d.age > p.targetRetireAge,
+  );
   const totalDebt = debts.filter((l) => !l.excluded).reduce((s, l) => s + l.startBalance, 0);
   // Net of debt: borrowed money sitting in an asset is not money you own, so the
   // "what must I contribute" solver has to start from the net figure.
@@ -364,7 +370,9 @@ export default function Fire() {
               </thead>
               <tbody>
                 {debts.map((l) => {
-                  const mr = l.annualRate > 0 ? Math.pow(1 + l.annualRate, 1 / 12) - 1 : 0;
+                  const mr = monthlyFinancingRate(l.annualRate);
+                  const payoffFor = (id: number) =>
+                    result.debtPayoff.find((d) => d.name === debts.find((x) => x.id === id)?.name)?.age ?? null;
                   const charge = l.startBalance * mr;
                   const principal = l.monthlyPayment - charge;
                   const standsStill = l.monthlyPayment > 0 && principal <= 0;
@@ -396,7 +404,16 @@ export default function Fire() {
                         ) : standsStill ? (
                           <span className="text-loss">never — instalment below the {rm(charge)}/mo charge</span>
                         ) : (
-                          <span className="text-gain">{rm(principal)}/mo off principal</span>
+                          <span>
+                            <span className="text-gain">{rm(principal)}/mo off principal</span>
+                            {payoffFor(l.id) != null && (
+                              <span className="block text-muted">
+                                clears at age {Math.round(payoffFor(l.id)!)}
+                                {payoffFor(l.id)! > p.targetRetireAge &&
+                                  ` — ${Math.round(payoffFor(l.id)! - p.targetRetireAge)} yrs after you retire`}
+                              </span>
+                            )}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -416,6 +433,18 @@ export default function Fire() {
             longer owed, so from that month it is invested into whatever the borrowing funded
             (set that on the debt in Accounts) rather than disappearing from the projection.
           </div>
+          {stillPayingAtRetirement.length > 0 && (
+            <div className="px-3 pb-3 text-xs text-warn">
+              {stillPayingAtRetirement.map((d) => (
+                <div key={d.name}>
+                  {d.name} is still being paid at {p.targetRetireAge}:{' '}
+                  {rm(d.monthlyPayment)}/mo until age {Math.round(d.age!)}. That is a retirement
+                  expense of {rm(d.monthlyPayment * 12)}/yr the FIRE number above doesn't include —
+                  either add it to your target income or plan to settle the balance at retirement.
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 

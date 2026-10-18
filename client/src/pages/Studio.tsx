@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Palette, Download, Copy, RefreshCw } from 'lucide-react';
 import { api, useDataRefresh } from '../lib/api';
-import { monthLabel } from '../lib/format';
+import { monthLabel, rm } from '../lib/format';
 import { Card, CardHeader, Button, Field, TextInput, Toggle, PageSkeleton, PageHeader, cn } from '../components/ui';
 import { useToast } from '../components/Toast';
 
@@ -93,8 +93,14 @@ export default function Studio() {
 
     // per-asset breakdown with month-over-month change (from the series' byCategory)
     const s = dash.series;
-    const cur: Record<string, number> = s[s.length - 1]?.byCategory || {};
-    const prev: Record<string, number> = s.length > 1 ? s[s.length - 2]?.byCategory || {} : {};
+    // Net of any borrowing. These cards get posted publicly next to a net-worth
+    // figure, and gross slices beside a net number describe a bigger portfolio
+    // than the one you have — a financed asset would read as if you owned it
+    // outright. Netting is also the more private option: the card simply shows
+    // your equity, with no need to disclose the financing at all.
+    const cur: Record<string, number> = s[s.length - 1]?.byCategoryNet || s[s.length - 1]?.byCategory || {};
+    const prev: Record<string, number> =
+      s.length > 1 ? s[s.length - 2]?.byCategoryNet || s[s.length - 2]?.byCategory || {} : {};
     const bTotal = Object.values(cur).reduce((a: number, b: any) => a + (b || 0), 0) || 1;
     const breakdown = [...new Set([...Object.keys(cur), ...Object.keys(prev)])]
       .map((k) => ({
@@ -113,8 +119,9 @@ export default function Studio() {
       momPct: dash.series.length > 1 ? (dash.momNetWorth / (dash.netWorth - dash.momNetWorth)) * 100 : 0,
       exEpf: dash.netWorthExEpf,
       exEpfPct: dash.netWorth ? (dash.netWorthExEpf / dash.netWorth) * 100 : 0,
-      alloc: alloc.items as { label: string; value: number; pct: number }[],
-      allocTotal: alloc.total,
+      alloc: (alloc.netItems ?? alloc.items) as { label: string; value: number; pct: number }[],
+      allocTotal: alloc.netTotal ?? alloc.total,
+      debtNetted: alloc.totalDebt ?? 0,
       breakdown,
       breakdownTotal: bTotal,
       fireTarget: settings && settings.swr ? (settings.fire_target_monthly_income * 12) / settings.swr : 3000000,
@@ -218,6 +225,15 @@ export default function Studio() {
         Reminder: share what you <i>did</i>, never what others should buy. Cards say “personal journal · not financial
         advice” for a reason.
       </p>
+      {data.debtNetted > 0 && (
+        <p className="text-xs text-muted">
+          The allocation and breakdown cards show your <strong className="text-text">equity</strong> — each
+          borrowing is subtracted from the asset it funded, so the slices add up to the net-worth figure
+          on the cards ({rm(data.allocTotal)}). A financed asset shown gross would read as though you
+          owned it outright, which is the one thing a shared card must not do. It also means you need
+          not disclose the {rm(data.debtNetted)} of financing at all.
+        </p>
+      )}
     </div>
   );
 }

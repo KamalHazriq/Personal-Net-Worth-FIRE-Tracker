@@ -99,6 +99,11 @@ the loan without raising what you own, so the app keeps the two apart:
   debt ever clears. Left at zero the balance is carried flat rather than
   compounded, and the card shows the average monthly movement from your own
   snapshots as a sanity check against the instalment you enter.
+- **Studio** cards show your **equity**: each borrowing is subtracted from the
+  asset it funded, so the slices add up to the net-worth figure printed beside
+  them. A financed asset drawn gross would read as though you owned it outright,
+  which is the one thing a shared card must not do — and netting also means the
+  financing need not be disclosed at all.
 - **Zakat** lets you choose whether long-term financing is deductible in full or
   only the portion due now (Settings). Both figures are shown side by side on
   the Goals page. That treatment is a fiqh question — the app reports both and

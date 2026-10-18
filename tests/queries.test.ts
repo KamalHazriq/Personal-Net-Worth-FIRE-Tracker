@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { initSchema } from '../server/src/db.ts';
 import {
+  netWorthSeries,
   dashboardSummary,
   investmentsGrid,
   cryptoSeries,
@@ -73,4 +74,36 @@ test('driftAlerts flags over-cap individual stocks but exempts ETFs', () => {
   const symbols = d.alerts.map((a: any) => a.symbol);
   assert.ok(symbols.includes('BIGSTOCK'));
   assert.ok(!symbols.includes('BIGETF'));
+});
+
+test('byCategoryNet subtracts a borrowing from the asset it funded and adds up to net worth', () => {
+  // A separate database: the shared fixture has no liabilities.
+  const d: any = new Database(':memory:');
+  initSchema(d);
+  d.prepare('INSERT OR IGNORE INTO settings (id) VALUES (1)').run();
+  const acc = d.prepare('INSERT INTO accounts (name, category, subtype, is_epf, is_liquid) VALUES (?,?,?,?,?)');
+  const bank = acc.run('Bank', 'Bank', 'Bank', 0, 1).lastInsertRowid;
+  const asb = acc.run('ASB', 'Investment', 'ASB', 0, 1).lastInsertRowid;
+  const loan = acc.run('ASBF', 'Liability', 'Loan', 0, 1).lastInsertRowid;
+  const card = acc.run('Card', 'Liability', 'CreditCard', 0, 1).lastInsertRowid;
+  d.prepare('UPDATE accounts SET financed_account_id=? WHERE id=?').run(asb, loan);
+
+  const snap = d.prepare('INSERT INTO snapshots (account_id, date, value) VALUES (?,?,?)');
+  snap.run(bank, '2026-01-31', 10000);
+  snap.run(asb, '2026-01-31', 100000);
+  snap.run(loan, '2026-01-31', 80000);
+  snap.run(card, '2026-01-31', 500);
+
+  const [m] = netWorthSeries(d) as any[];
+  // Gross describes exposure.
+  assert.equal(m.byCategory.ASB, 100000);
+  assert.equal(m.byCategory.Bank, 10000);
+  // Net subtracts the financing from ASB, and the card from cash.
+  assert.equal(m.byCategoryNet.ASB, 20000);
+  assert.equal(m.byCategoryNet.Bank, 9500);
+  // The whole point: the net buckets reconcile with net worth, so a shared
+  // card showing both cannot describe a portfolio bigger than the one you own.
+  const total = Object.values(m.byCategoryNet).reduce((a: any, b: any) => a + b, 0);
+  assert.equal(total, m.netWorth);
+  assert.equal(total, 29500);
 });

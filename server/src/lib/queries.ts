@@ -84,9 +84,10 @@ export function snapshotDates(db: Database.Database): string[] {
 export function netWorthSeries(db: Database.Database) {
   const rows = db
     .prepare(
-      `SELECT s.date, a.category, a.subtype, a.is_epf, SUM(s.value) v
+      `SELECT s.date, a.category, a.subtype, a.is_epf, SUM(s.value) v,
+         (SELECT fa.subtype FROM accounts fa WHERE fa.id = a.financed_account_id) financedSubtype
        FROM snapshots s JOIN accounts a ON a.id = s.account_id
-       GROUP BY s.date, a.category, a.subtype, a.is_epf
+       GROUP BY s.date, a.category, a.subtype, a.is_epf, financedSubtype
        ORDER BY s.date`,
     )
     .all() as any[];
@@ -101,6 +102,7 @@ export function netWorthSeries(db: Database.Database) {
         liability: 0,
         epf: 0,
         byCategory: {} as Record<string, number>,
+        byCategoryNet: {} as Record<string, number>,
       });
     }
     const d = byDate.get(r.date);
@@ -109,10 +111,23 @@ export function netWorthSeries(db: Database.Database) {
       d.investment += r.v;
       if (r.is_epf) d.epf += r.v;
     } else if (r.category === 'Liability') d.liability += r.v;
-    // category buckets for the stacked area (split investments by subtype)
-    if (r.category === 'Bank') d.byCategory['Bank'] = (d.byCategory['Bank'] || 0) + r.v;
-    else if (r.category === 'Investment')
-      d.byCategory[r.subtype || 'Other'] = (d.byCategory[r.subtype || 'Other'] || 0) + r.v;
+    // Category buckets for the stacked area (investments split by subtype).
+    // `byCategory` is gross assets; `byCategoryNet` subtracts each borrowing
+    // from whatever it funded, so its buckets add up to net worth. A shared
+    // card showing a net-worth figure has to use the net one, or the slices
+    // describe a bigger portfolio than the number beside them.
+    if (r.category === 'Bank') {
+      d.byCategory['Bank'] = (d.byCategory['Bank'] || 0) + r.v;
+      d.byCategoryNet['Bank'] = (d.byCategoryNet['Bank'] || 0) + r.v;
+    } else if (r.category === 'Investment') {
+      const k = r.subtype || 'Other';
+      d.byCategory[k] = (d.byCategory[k] || 0) + r.v;
+      d.byCategoryNet[k] = (d.byCategoryNet[k] || 0) + r.v;
+    } else if (r.category === 'Liability') {
+      // Unattributed debt (a card) comes off cash, where it is settled from.
+      const k = r.financedSubtype || 'Bank';
+      d.byCategoryNet[k] = (d.byCategoryNet[k] || 0) - r.v;
+    }
   }
 
   return Array.from(byDate.values()).map((d) => ({
@@ -124,6 +139,9 @@ export function netWorthSeries(db: Database.Database) {
     netWorth: round(d.bank + d.investment - d.liability),
     netWorthExEpf: round(d.bank + d.investment - d.liability - d.epf),
     byCategory: Object.fromEntries(Object.entries(d.byCategory).map(([k, v]) => [k, round(v as number)])),
+    byCategoryNet: Object.fromEntries(
+      Object.entries(d.byCategoryNet).map(([k, v]) => [k, round(v as number)]),
+    ),
   }));
 }
 

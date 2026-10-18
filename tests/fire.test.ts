@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { project, sensitivity, fireNumber, solveContribution, type FireInputs, type FireLiability } from '../client/src/lib/fireEngine.ts';
+import { project, sensitivity, fireNumber, solveContribution, monthlyFinancingRate, type FireInputs, type FireLiability } from '../client/src/lib/fireEngine.ts';
 
 const base: FireInputs = {
   currentAge: 24,
@@ -168,4 +168,29 @@ test('a cleared debt frees its instalment into the asset it funded', () => {
   );
   // It must not start flowing before the debt is actually gone.
   assert.ok(Math.abs(linked.points[0].accessible - unlinked.points[0].accessible) < 0.01);
+});
+
+test('financing is charged at a nominal monthly rate, so a real instalment fits its real term', () => {
+  // RM100,000 at 4.05% over 40 years is an instalment of about RM421/mo. That
+  // only holds if the monthly charge is annual/12 (0.3375%); taking the twelfth
+  // root instead (0.3314%) under-charges interest and retires the loan over a
+  // year early, which would quietly flatter every long financing.
+  assert.ok(Math.abs(monthlyFinancingRate(0.0405) - 0.0405 / 12) < 1e-12);
+
+  const over40Years = {
+    currentAge: 24, targetRetireAge: 64, epfUnlockAge: 55, horizonAge: 64,
+    swr: 0.05, targetIncome: 15000, cashStart: 0, cashReturn: 0,
+    accounts: [{ id: 1, name: 'ASB', subtype: 'ASB', is_epf: 0, startBalance: 100_000, monthly: 0, annualReturn: 0.055, growth: 0 }],
+    liabilities: [{ id: 9, name: 'ASBF', subtype: 'Loan', startBalance: 100_000, monthlyPayment: 422, annualRate: 0.0405, financedAccountId: 1 }],
+  };
+  const r = project(over40Years);
+
+  // Clears within the 40-year term, but only just — not years early.
+  assert.ok(r.debtClearedAge != null, 'RM422/mo should retire the loan');
+  assert.ok(r.debtClearedAge! >= 62, `should take close to 40 years, got age ${r.debtClearedAge}`);
+  assert.ok(r.debtClearedAge! <= 64, `should not exceed the term, got age ${r.debtClearedAge}`);
+
+  // First-month charge is the nominal one.
+  const firstMonthCharge = 100_000 * monthlyFinancingRate(0.0405);
+  assert.ok(Math.abs(firstMonthCharge - 337.5) < 0.01, `expected RM337.50, got ${firstMonthCharge.toFixed(2)}`);
 });

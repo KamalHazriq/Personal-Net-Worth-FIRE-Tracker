@@ -150,10 +150,12 @@ The app never listens on a network interface at all — the only way in is throu
 own tunnel.
 
 ```bash
-npm run build && npm start
+npm run build
+npm start
 ```
 
-In a second terminal, once per machine:
+(Two commands, not one chain — PowerShell has no `&&`.) Leave `npm start` running; in a second
+terminal, once per machine:
 
 ```bash
 tailscale serve --bg --https=443 8787
@@ -187,10 +189,30 @@ the data, but the traffic itself isn't encrypted.
 ### Either way
 
 - The whole app is served from the API server, so the phone needs **one** address — no Vite, no
-  second port. Run `npm run build` again after changing the client.
+  second port. Run `npm run build` again after changing the client, or the phone keeps the
+  old version.
 - `SERVER_HOST=0.0.0.0` exists and is a bad idea: it puts the app on every network the laptop
   joins, including public wifi, with no HTTPS. The server warns when you use it.
 - Nothing leaves your devices. There is no cloud component to any of this.
+
+### Day to day
+
+The laptop holds the database, so it has to be awake and running the server for the phone to
+show anything. This is a window onto your laptop, not a hosted service.
+
+| | |
+|---|---|
+| After a reboot | `npm start`. A `--bg` serve config survives reboots; the app does not. |
+| After editing the client | `npm run build` |
+| Phone shows nothing | Check Tailscale is toggled **on** on the phone — the URL won't resolve otherwise. |
+| Laptop asleep | Phone gets a connection error. Sleep stops the server reaching the network. |
+| Asks for the passcode again | Expected: sessions last `SESSION_DAYS` (14) and end on every server restart. |
+| Stop sharing | `tailscale serve --https=443 off` |
+
+To check what is being served: `tailscale serve status` should print your `ts.net` URL proxying
+to `http://127.0.0.1:8787`, marked **tailnet only** — that last part means it is not on the
+public internet. `netstat -ano | findstr 8787` should show `127.0.0.1:8787` and no other
+address: the app itself never listens on a network interface.
 
 ## Export & backup
 

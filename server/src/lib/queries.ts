@@ -546,7 +546,7 @@ export function investmentsGrid(db: Database.Database, year: number) {
       capital: r.capital,
       profit_loss: r.profit_loss,
       balance: r.balance,
-      plPct: r.capital ? round((r.profit_loss / r.capital) * 100, 2) : null,
+      plPct: r.capital > 0 ? round((r.profit_loss / r.capital) * 100, 2) : null,
     };
   }
   // months that still have at least one surviving platform entry
@@ -563,7 +563,7 @@ export function investmentsGrid(db: Database.Database, year: number) {
       pl += c.profit_loss || 0;
       bal += c.balance != null ? c.balance : (c.capital || 0) + (c.profit_loss || 0);
     }
-    totals[m] = { capital: round(cap), profit_loss: round(pl), balance: round(bal), plPct: cap ? round((pl / cap) * 100, 2) : null };
+    totals[m] = { capital: round(cap), profit_loss: round(pl), balance: round(bal), plPct: cap > 0 ? round((pl / cap) * 100, 2) : null };
   }
   const years = (
     db.prepare(`SELECT DISTINCT substr(month,1,4) y FROM investments ORDER BY y`).all() as any[]

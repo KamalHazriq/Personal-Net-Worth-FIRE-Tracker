@@ -63,6 +63,36 @@ test('investmentsGrid filters the -100% glitch row', () => {
   assert.ok(!g.months.includes('2026-03-01'));
 });
 
+test('a platform withdrawn past its capital reports no return %', () => {
+  // Withdraw more than you put in and capital goes negative. The ratio then
+  // says nothing useful - a real one read "+499.9%" on a RM568 balance - so
+  // the query returns null and the page prints "withdrawn" instead.
+  const db2: any = new Database(':memory:');
+  initSchema(db2);
+  const inv2 = db2.prepare('INSERT INTO investments (platform, month, capital, profit_loss, balance) VALUES (?,?,?,?,?)');
+  inv2.run('Held', '2026-01-01', 1000, 250, 1250);
+  inv2.run('Withdrawn', '2026-01-01', -142.15, 710.61, 568.46);
+
+  const g: any = investmentsGrid(db2, 2026);
+  assert.equal(g.byPlatform['Held']['2026-01-01'].plPct, 25);
+  assert.equal(g.byPlatform['Withdrawn']['2026-01-01'].plPct, null, 'a negative capital base must not yield a %');
+  // The ringgit figures are still real and still count toward the total.
+  assert.equal(g.byPlatform['Withdrawn']['2026-01-01'].profit_loss, 710.61);
+  // Total capital here is 857.85, still positive, so the aggregate stays meaningful.
+  assert.ok(g.totals['2026-01-01'].plPct > 0);
+  db2.close();
+});
+
+test('an aggregate over entirely withdrawn platforms reports no % either', () => {
+  const db3: any = new Database(':memory:');
+  initSchema(db3);
+  db3.prepare('INSERT INTO investments (platform, month, capital, profit_loss, balance) VALUES (?,?,?,?,?)')
+    .run('Gone', '2026-01-01', -500, 500, 0);
+  const g: any = investmentsGrid(db3, 2026);
+  assert.equal(g.totals['2026-01-01'].plPct, null);
+  db3.close();
+});
+
 test('cryptoSeries sums coin values per month', () => {
   const c: any = cryptoSeries(db);
   const feb = c.byMonth.find((m: any) => m.month === '2026-02-28');

@@ -117,7 +117,11 @@ export default function Investments() {
           <Stat label="Capital invested" value={rm(t.capital)} sub={mLabel(month)} />
           <Stat label="Current balance" value={rm(t.balance)} />
           <Stat label="Profit / Loss" value={signedRm(t.profit_loss)} tone={t.profit_loss >= 0 ? 'gain' : 'loss'} />
-          <Stat label="Aggregate P/L %" value={pct(t.plPct)} tone={t.plPct >= 0 ? 'gain' : 'loss'} />
+          <Stat
+            label="Aggregate P/L %"
+            value={t.plPct == null ? 'n/a' : pct(t.plPct)}
+            tone={t.plPct == null ? undefined : t.plPct >= 0 ? 'gain' : 'loss'}
+          />
         </div>
       )}
 
@@ -164,7 +168,14 @@ export default function Investments() {
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{rm(c.balance ?? c.capital + c.profit_loss)}</td>
                     <td className="px-3 py-2 text-right">
-                      <Badge tone={c.plPct >= 0 ? 'gain' : 'loss'}>{pct(c.plPct)}</Badge>
+                      {/* Once more has been withdrawn than was put in, capital is
+                          negative and a return % means nothing - Webull printed
+                          "+499.9%". Say what actually happened instead. */}
+                      {c.plPct == null ? (
+                        <span className="text-muted text-xs">withdrawn</span>
+                      ) : (
+                        <Badge tone={c.plPct >= 0 ? 'gain' : 'loss'}>{pct(c.plPct)}</Badge>
+                      )}
                     </td>
                   </tr>
                 );
@@ -178,7 +189,11 @@ export default function Investments() {
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{rm(t.balance)}</td>
                   <td className="px-3 py-2 text-right">
-                    <Badge tone={t.plPct >= 0 ? 'gain' : 'loss'}>{pct(t.plPct)}</Badge>
+                    {t.plPct == null ? (
+                      <span className="text-muted text-xs">n/a</span>
+                    ) : (
+                      <Badge tone={t.plPct >= 0 ? 'gain' : 'loss'}>{pct(t.plPct)}</Badge>
+                    )}
                   </td>
                 </tr>
               )}
